@@ -4,6 +4,8 @@ const mongoose = require("mongoose");
 require("dotenv").config();
 
 const authRoutes = require("./routes/auth");
+const entriesRoutes = require("./routes/entries");
+const statsRoutes = require("./routes/stats");
 
 const app = express();
 
@@ -38,6 +40,8 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/auth", authRoutes);
+app.use("/entries", entriesRoutes);
+app.use("/stats", statsRoutes);
 
 /**
  * Boot

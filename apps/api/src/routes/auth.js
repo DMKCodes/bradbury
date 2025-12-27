@@ -1,6 +1,11 @@
+// Auth routes:
+// - POST /auth/login -> issue JWT
+// - GET  /auth/me -> validate JWT and return user
+
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const { findUserByUsername } = require("../config/users");
+const { requireAuth } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -43,6 +48,14 @@ router.post("/login", (req, res) => {
     ok: true,
     token,
     user: safeUserPayload(user),
+  });
+});
+
+// Token validation + session restore
+router.get("/me", requireAuth, (req, res) => {
+  return res.json({
+    ok: true,
+    user: req.user,
   });
 });
 
