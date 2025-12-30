@@ -8,18 +8,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { getStatsSummary } from "../lib/api";
-
-const APP_TIMEZONE = "America/New_York";
-
-const todayDayKeyNY = () => {
-    return new Intl.DateTimeFormat("en-CA", {
-        timeZone: APP_TIMEZONE,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-    }).format(new Date());
-};
+import { getStatsSummary, getTodayDayKeyNY } from "../lib/store";
 
 const dayKeyAddDays = (dayKey, deltaDays) => {
     const [y, m, d] = String(dayKey).split("-").map((n) => Number(n));
@@ -61,7 +50,7 @@ const StatBox = ({ title, value, subtitle }) => {
 };
 
 const StatsScreen = () => {
-    const to = useMemo(() => todayDayKeyNY(), []);
+    const to = useMemo(() => getTodayDayKeyNY(), []);
     const from = useMemo(() => dayKeyAddDays(to, -29), [to]);
 
     const [loading, setLoading] = useState(true);
@@ -91,6 +80,7 @@ const StatsScreen = () => {
 
     const totals = data?.totals || {};
     const streak = data?.streak || {};
+    const byCategory = data?.byCategory || {};
     const badges = Array.isArray(data?.badges) ? data.badges : [];
 
     return (
@@ -146,11 +136,36 @@ const StatsScreen = () => {
                                 gap: 8,
                             }}
                         >
-                            <Text style={{ fontWeight: "600" }}>Badges earned</Text>
+                            <Text style={{ fontWeight: "700" }}>By category</Text>
+
+                            {["essay", "story", "poem"].map((cat) => (
+                                <View key={cat} style={{ gap: 2 }}>
+                                    <Text style={{ fontWeight: "700" }}>
+                                        {cat.toUpperCase()}
+                                    </Text>
+                                    <Text style={{ opacity: 0.7 }}>
+                                        Entries: {formatNumber(byCategory[cat]?.entriesCount)} •
+                                        Words: {formatNumber(byCategory[cat]?.totalWords)} •
+                                        Avg: {formatAvg(byCategory[cat]?.avgRating)}
+                                    </Text>
+                                </View>
+                            ))}
+                        </View>
+
+                        <View
+                            style={{
+                                borderWidth: 1,
+                                borderColor: "#999",
+                                borderRadius: 10,
+                                padding: 12,
+                                gap: 8,
+                            }}
+                        >
+                            <Text style={{ fontWeight: "700" }}>Badges earned</Text>
                             {badges.length ? (
                                 badges.map((b) => (
                                     <View key={b.key} style={{ gap: 2 }}>
-                                        <Text style={{ fontWeight: "600" }}>{b.label}</Text>
+                                        <Text style={{ fontWeight: "700" }}>{b.label}</Text>
                                         <Text style={{ opacity: 0.7 }}>{b.description}</Text>
                                     </View>
                                 ))

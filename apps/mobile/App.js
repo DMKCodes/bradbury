@@ -6,9 +6,13 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 
-import { authStorage, me, logout } from "./src/lib/api";
+import {
+    getCurrentProfile,
+    resetAllLocalData,
+    setCurrentProfileId,
+} from "./src/lib/store";
 
-import LoginScreen from "./src/screens/LoginScreen";
+import ProfileScreen from "./src/screens/ProfileScreen";
 import TodayScreen from "./src/screens/TodayScreen";
 import StatsScreen from "./src/screens/StatsScreen";
 import HistoryScreen from "./src/screens/HistoryScreen";
@@ -16,62 +20,63 @@ import HistoryScreen from "./src/screens/HistoryScreen";
 const Stack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
 
-const AccountScreen = ({ user, onLogout }) => {
+const AccountScreen = ({ profile, onSwitchProfile, onResetData }) => {
     return (
         <SafeAreaView style={{ flex: 1, padding: 16 }}>
             <View style={{ gap: 12 }}>
                 <Text style={{ fontSize: 22, fontWeight: "600" }}>Account</Text>
                 <Text style={{ opacity: 0.7 }}>
-                    Signed in as: {user?.displayName}
+                    Current profile: {profile?.displayName} ({profile?.id})
                 </Text>
 
-                <View style={{ height: 12 }} />
+                <View style={{ height: 8 }} />
 
-                <Button title="Log out" onPress={onLogout} />
+                <Button title="Switch profile" onPress={onSwitchProfile} />
+                <View style={{ height: 8 }} />
+                <Button title="Reset all local data" onPress={onResetData} />
             </View>
         </SafeAreaView>
     );
 };
 
-const MainTabs = ({ user, onLogout }) => {
+const MainTabs = ({ profile, onSwitchProfile, onResetData }) => {
     return (
         <Tabs.Navigator>
             <Tabs.Screen name="Today">
-                {() => <TodayScreen user={user} />}
+                {() => <TodayScreen profile={profile} />}
             </Tabs.Screen>
+
+            <Tabs.Screen name="History" component={HistoryScreen} />
 
             <Tabs.Screen name="Stats" component={StatsScreen} />
 
             <Tabs.Screen name="Account">
-                {() => <AccountScreen user={user} onLogout={onLogout} />}
+                {() => (
+                    <AccountScreen
+                        profile={profile}
+                        onSwitchProfile={onSwitchProfile}
+                        onResetData={onResetData}
+                    />
+                )}
             </Tabs.Screen>
-
-            <Tabs.Screen name="History" component={HistoryScreen} />
         </Tabs.Navigator>
     );
 };
 
 const App = () => {
-    const [bootState, setBootState] = useState("booting");
-    const [user, setUser] = useState(null);
+    const [bootState, setBootState] = useState("booting"); // booting | ready
+    const [profile, setProfile] = useState(null);
 
     useEffect(() => {
         let cancelled = false;
 
         const boot = async () => {
-            const token = await authStorage.getToken();
-
-            if (token) {
-                try {
-                    const u = await me();
-                    if (!cancelled) setUser(u);
-                } catch {
-                    await authStorage.clear();
-                    if (!cancelled) setUser(null);
-                }
+            try {
+                const p = await getCurrentProfile();
+                if (!cancelled) setProfile(p);
+            } finally {
+                if (!cancelled) setBootState("ready");
             }
-
-            if (!cancelled) setBootState("ready");
         };
 
         boot();
@@ -81,9 +86,15 @@ const App = () => {
         };
     }, []);
 
-    const handleLogout = async () => {
-        await logout();
-        setUser(null);
+    const handleSwitchProfile = async () => {
+        await setCurrentProfileId(null);
+        setProfile(null);
+    };
+
+    const handleResetData = async () => {
+        await resetAllLocalData();
+        await setCurrentProfileId(null);
+        setProfile(null);
     };
 
     if (bootState !== "ready") {
@@ -106,12 +117,12 @@ const App = () => {
         <SafeAreaProvider>
             <NavigationContainer>
                 <Stack.Navigator>
-                    {!user ? (
+                    {!profile ? (
                         <Stack.Screen
-                            name="Login"
+                            name="Profile"
                             options={{ headerShown: false }}
                         >
-                            {() => <LoginScreen onAuthed={setUser} />}
+                            {() => <ProfileScreen onSelected={setProfile} />}
                         </Stack.Screen>
                     ) : (
                         <Stack.Screen
@@ -120,8 +131,9 @@ const App = () => {
                         >
                             {() => (
                                 <MainTabs
-                                    user={user}
-                                    onLogout={handleLogout}
+                                    profile={profile}
+                                    onSwitchProfile={handleSwitchProfile}
+                                    onResetData={handleResetData}
                                 />
                             )}
                         </Stack.Screen>

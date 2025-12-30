@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { listEntries } from "../lib/api";
+import { listEntries } from "../lib/store";
 
 const CATEGORIES = [
     { key: "", label: "All" },
@@ -29,10 +29,8 @@ const clampRating = (value) => {
 const HistoryScreen = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-
     const [items, setItems] = useState([]);
 
-    // Filters
     const [category, setCategory] = useState("");
     const [tag, setTag] = useState("");
     const [search, setSearch] = useState("");
@@ -64,8 +62,7 @@ const HistoryScreen = () => {
     };
 
     useEffect(() => {
-        load(queryParams);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        load({});
     }, []);
 
     const applyFilters = () => {
@@ -91,7 +88,7 @@ const HistoryScreen = () => {
                 <View style={{ gap: 4 }}>
                     <Text style={{ fontSize: 22, fontWeight: "600" }}>History</Text>
                     <Text style={{ opacity: 0.7 }}>
-                        Search and filter across all logged entries.
+                        Search and filter across all logged entries (local).
                     </Text>
                 </View>
 
@@ -146,9 +143,6 @@ const HistoryScreen = () => {
                                 padding: 10,
                             }}
                         />
-                        <Text style={{ opacity: 0.7, fontSize: 12 }}>
-                            Tags are stored lowercase; matching is exact.
-                        </Text>
                     </View>
 
                     <View style={{ gap: 6 }}>
@@ -235,54 +229,50 @@ const HistoryScreen = () => {
                             Showing {items.length} entr{items.length === 1 ? "y" : "ies"}.
                         </Text>
 
-                        {items.map((x) => {
-                            return (
+                        {items.map((x) => (
+                            <View
+                                key={x.id}
+                                style={{
+                                    borderWidth: 1,
+                                    borderColor: "#999",
+                                    borderRadius: 10,
+                                    padding: 12,
+                                    gap: 4,
+                                }}
+                            >
                                 <View
-                                    key={x._id}
                                     style={{
-                                        borderWidth: 1,
-                                        borderColor: "#999",
-                                        borderRadius: 10,
-                                        padding: 12,
-                                        gap: 4,
+                                        flexDirection: "row",
+                                        justifyContent: "space-between",
+                                        gap: 10,
                                     }}
                                 >
-                                    <View
-                                        style={{
-                                            flexDirection: "row",
-                                            justifyContent: "space-between",
-                                            gap: 10,
-                                        }}
-                                    >
-                                        <Text style={{ fontWeight: "800" }}>
-                                            {categoryLabel(x.category)}
-                                        </Text>
-                                        <Text style={{ opacity: 0.7 }}>{x.dayKey}</Text>
-                                    </View>
-
-                                    <Text style={{ fontSize: 16, fontWeight: "600" }}>
-                                        {x.title}
+                                    <Text style={{ fontWeight: "800" }}>
+                                        {categoryLabel(x.category)}
                                     </Text>
-
-                                    {x.author ? (
-                                        <Text style={{ opacity: 0.8 }}>
-                                            {x.author}
-                                        </Text>
-                                    ) : null}
-
-                                    <Text style={{ opacity: 0.7 }}>
-                                        Rating: {x.rating}
-                                        {x.wordCount != null ? ` • Words: ${x.wordCount}` : ""}
-                                    </Text>
-
-                                    {Array.isArray(x.tags) && x.tags.length ? (
-                                        <Text style={{ opacity: 0.7 }}>
-                                            Tags: {x.tags.join(", ")}
-                                        </Text>
-                                    ) : null}
+                                    <Text style={{ opacity: 0.7 }}>{x.dayKey}</Text>
                                 </View>
-                            );
-                        })}
+
+                                <Text style={{ fontSize: 16, fontWeight: "600" }}>
+                                    {x.title}
+                                </Text>
+
+                                {x.author ? (
+                                    <Text style={{ opacity: 0.8 }}>{x.author}</Text>
+                                ) : null}
+
+                                <Text style={{ opacity: 0.7 }}>
+                                    Rating: {x.rating}
+                                    {x.wordCount != null ? ` • Words: ${x.wordCount}` : ""}
+                                </Text>
+
+                                {Array.isArray(x.tags) && x.tags.length ? (
+                                    <Text style={{ opacity: 0.7 }}>
+                                        Tags: {x.tags.join(", ")}
+                                    </Text>
+                                ) : null}
+                            </View>
+                        ))}
 
                         {!items.length ? (
                             <Text style={{ opacity: 0.7 }}>

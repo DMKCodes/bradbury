@@ -11,28 +11,17 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
-    createEntry,
-    deleteEntry,
+    getTodayDayKeyNY,
     listEntries,
-    updateEntry,
-} from "../lib/api";
-
-const APP_TIMEZONE = "America/New_York";
+    upsertEntryForDayCategory,
+    deleteEntryForDayCategory,
+} from "../lib/store";
 
 const CATEGORIES = [
     { key: "essay", label: "Essay (Nonfiction)" },
     { key: "story", label: "Short Story (Fiction)" },
     { key: "poem", label: "Poem" },
 ];
-
-const getTodayDayKeyNY = () => {
-    return new Intl.DateTimeFormat("en-CA", {
-        timeZone: APP_TIMEZONE,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-    }).format(new Date());
-};
 
 const splitTags = (input) => {
     return String(input || "")
@@ -95,7 +84,7 @@ const RatingRow = ({ value, onChange, disabled }) => {
     );
 };
 
-const TodayScreen = ({ user }) => {
+const TodayScreen = ({ profile }) => {
     const dayKey = useMemo(() => getTodayDayKeyNY(), []);
 
     const [loading, setLoading] = useState(true);
@@ -137,7 +126,10 @@ const TodayScreen = ({ user }) => {
         setError("");
 
         try {
-            const items = await listEntries({ dayKey });
+            const items = await listEntries({
+                dayKey,
+                profileId: profile?.id,
+            });
 
             const nextItemsByCategory = { essay: null, story: null, poem: null };
             for (const item of items) {
@@ -180,7 +172,7 @@ const TodayScreen = ({ user }) => {
     useEffect(() => {
         loadToday();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dayKey]);
+    }, [dayKey, profile?.id]);
 
     const updateForm = (category, patch) => {
         setFormsByCategory((prev) => ({
@@ -204,7 +196,6 @@ const TodayScreen = ({ user }) => {
         setSaveError(category, "");
 
         const form = formsByCategory[category];
-        const existing = itemsByCategory[category];
 
         if (!form.title.trim()) {
             setSaveError(category, "Title is required.");
@@ -219,6 +210,7 @@ const TodayScreen = ({ user }) => {
         const wordCountNum = normalizeWordCount(form.wordCount);
 
         const payload = {
+            profileId: profile?.id,
             dayKey,
             category,
             title: form.title.trim(),
@@ -232,26 +224,14 @@ const TodayScreen = ({ user }) => {
         setSaving(category, true);
 
         try {
-            let saved;
-
-            if (existing) {
-                saved = await updateEntry(existing._id, payload);
-            } else {
-                saved = await createEntry(payload);
-            }
+            const saved = await upsertEntryForDayCategory(payload);
 
             setItemsByCategory((prev) => ({ ...prev, [category]: saved }));
 
             Alert.alert("Saved", `${category.toUpperCase()} entry saved.`);
         } catch (err) {
             console.error(err);
-
-            const message =
-                err?.message === "entry_already_exists_for_day_and_category"
-                    ? "An entry for this category already exists today."
-                    : "Save failed. Please try again.";
-
-            setSaveError(category, message);
+            setSaveError(category, "Save failed. Please try again.");
         } finally {
             setSaving(category, false);
         }
@@ -274,7 +254,11 @@ const TodayScreen = ({ user }) => {
                         setSaving(category, true);
 
                         try {
-                            await deleteEntry(existing._id);
+                            await deleteEntryForDayCategory({
+                                profileId: profile?.id,
+                                dayKey,
+                                category,
+                            });
 
                             setItemsByCategory((prev) => ({
                                 ...prev,
@@ -303,7 +287,7 @@ const TodayScreen = ({ user }) => {
                 <View style={{ gap: 4 }}>
                     <Text style={{ fontSize: 22, fontWeight: "600" }}>Today</Text>
                     <Text style={{ opacity: 0.7 }}>
-                        {user?.displayName} — {dayKey}
+                        {profile?.displayName} — {dayKey}
                     </Text>
                 </View>
 
@@ -502,11 +486,7 @@ const TodayScreen = ({ user }) => {
                                     }}
                                 >
                                     <Text style={{ fontWeight: "600" }}>
-                                        {saving
-                                            ? "Saving…"
-                                            : existing
-                                                ? "Update"
-                                                : "Save"}
+                                        {saving ? "Saving…" : existing ? "Update" : "Save"}
                                     </Text>
                                 </Pressable>
 
