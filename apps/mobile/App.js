@@ -52,7 +52,7 @@ const MainTabs = ({ user, onLogout }) => {
 };
 
 const App = () => {
-    const [bootState, setBootState] = useState("booting"); // booting | ready
+    const [bootState, setBootState] = useState("booting");
     const [user, setUser] = useState(null);
 
     useEffect(() => {
