@@ -1,15 +1,19 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Button, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Button, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import * as Clipboard from "expo-clipboard";
 
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 
+
+
 import {
     getCurrentProfile,
     resetAllLocalData,
     setCurrentProfileId,
+    exportAllLocalData,
 } from "./src/lib/store";
 
 import ProfileScreen from "./src/screens/ProfileScreen";
@@ -20,7 +24,29 @@ import HistoryScreen from "./src/screens/HistoryScreen";
 const Stack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
 
-const AccountScreen = ({ profile, onSwitchProfile, onResetData }) => {
+const handleExportData = async () => {
+    try {
+        const payload = await exportAllLocalData();
+        const json = JSON.stringify(payload, null, 2);
+
+        await Clipboard.setStringAsync(json);
+
+        Alert.alert(
+            "Export copied",
+            `Copied ${json.length.toLocaleString()} characters to clipboard.\n\nPaste into a notes app or a file for backup.`
+        );
+    } catch (err) {
+        console.error(err);
+        Alert.alert("Export failed", "Unable to export local data.");
+    }
+};
+
+const AccountScreen = ({
+    profile,
+    onSwitchProfile,
+    onResetData,
+    onExportData,
+}) => {
     return (
         <SafeAreaView style={{ flex: 1, padding: 16 }}>
             <View style={{ gap: 12 }}>
@@ -33,13 +59,17 @@ const AccountScreen = ({ profile, onSwitchProfile, onResetData }) => {
 
                 <Button title="Switch profile" onPress={onSwitchProfile} />
                 <View style={{ height: 8 }} />
+
+                <Button title="Export local data to clipboard" onPress={onExportData} />
+                <View style={{ height: 8 }} />
+
                 <Button title="Reset all local data" onPress={onResetData} />
             </View>
         </SafeAreaView>
     );
 };
 
-const MainTabs = ({ profile, onSwitchProfile, onResetData }) => {
+const MainTabs = ({ profile, onSwitchProfile, onResetData, onExportData }) => {
     return (
         <Tabs.Navigator>
             <Tabs.Screen name="Today">
@@ -56,6 +86,7 @@ const MainTabs = ({ profile, onSwitchProfile, onResetData }) => {
                         profile={profile}
                         onSwitchProfile={onSwitchProfile}
                         onResetData={onResetData}
+                        onExportData={onExportData}
                     />
                 )}
             </Tabs.Screen>
@@ -134,6 +165,7 @@ const App = () => {
                                     profile={profile}
                                     onSwitchProfile={handleSwitchProfile}
                                     onResetData={handleResetData}
+                                    onExportData={handleExportData}
                                 />
                             )}
                         </Stack.Screen>

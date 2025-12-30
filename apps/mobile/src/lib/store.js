@@ -368,6 +368,27 @@ const resetAllLocalData = async () => {
     await ensureInitialized();
 };
 
+const exportAllLocalData = async () => {
+    await ensureInitialized();
+
+    const profiles = await readJson(KEYS.PROFILES, DEFAULT_PROFILES);
+    const currentProfileId = await AsyncStorage.getItem(KEYS.CURRENT_PROFILE_ID);
+    const entries = await readJson(KEYS.ENTRIES, []);
+
+    const payload = {
+        exportedAt: nowIso(),
+        app: {
+            name: "bradbury-2026",
+            schemaVersion: 1,
+        },
+        profiles,
+        currentProfileId,
+        entries,
+    };
+
+    return payload;
+};
+
 export {
     getTodayDayKeyNY,
     getProfiles,
@@ -380,4 +401,5 @@ export {
     deleteEntryForDayCategory,
     getStatsSummary,
     resetAllLocalData,
+    exportAllLocalData,
 };
