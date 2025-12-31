@@ -8,7 +8,7 @@ const KEYS = {
 
 const DEFAULT_PROFILES = [
     { id: "doug", displayName: "Doug" },
-    { id: "wife", displayName: "Wife" },
+    { id: "caroline", displayName: "Caroline" },
 ];
 
 const CATEGORY_ORDER = ["essay", "story", "poem"];
@@ -16,7 +16,6 @@ const CATEGORY_ORDER = ["essay", "story", "poem"];
 const nowIso = () => new Date().toISOString();
 
 const makeId = () => {
-    // RN-safe unique-enough id for this app
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 };
 

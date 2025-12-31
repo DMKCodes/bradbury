@@ -95,7 +95,7 @@ const MainTabs = ({ profile, onSwitchProfile, onResetData, onExportData }) => {
 };
 
 const App = () => {
-    const [bootState, setBootState] = useState("booting"); // booting | ready
+    const [bootState, setBootState] = useState("booting");
     const [profile, setProfile] = useState(null);
 
     useEffect(() => {
