@@ -19,6 +19,8 @@ import {
     upsertEntryForDayCategory,
 } from "../lib/store";
 
+import { Colors, GlobalStyles } from "../theme/theme";
+
 const PREFILL_KEY = "bradbury_log_prefill_v1";
 
 const CATEGORIES = [
@@ -123,7 +125,6 @@ const LogScreen = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // A) Standard behavior when category/entries change.
     useEffect(() => {
         const existing = todayEntries[selectedCategory] || null;
 
@@ -132,7 +133,6 @@ const LogScreen = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedCategory, todayEntries.essay, todayEntries.story, todayEntries.poem]);
 
-    // or B) Apply incoming prefill AFTER the standard prefill.
     useEffect(() => {
         if (!pendingPrefill) return;
         if (pendingPrefill.category !== selectedCategory) return;
@@ -142,7 +142,6 @@ const LogScreen = () => {
         setPendingPrefill(null);
     }, [pendingPrefill, selectedCategory]);
 
-    // On focus: read AsyncStorage handoff payload, then apply it.
     useFocusEffect(
         useCallback(() => {
             let alive = true;
@@ -160,12 +159,9 @@ const LogScreen = () => {
                     const cat = isValidCategory(payload?.category) ? payload.category : null;
                     const wc = Number.parseInt(String(payload?.wordCount ?? ""), 10);
 
-                    if (cat) {
-                        setSelectedCategory(cat);
-                    }
+                    if (cat) setSelectedCategory(cat);
 
                     if (Number.isFinite(wc) && wc > 0) {
-                        // Queue to apply after prefillFromEntry.
                         setPendingPrefill({
                             category: cat || selectedCategory,
                             wordCount: wc,
@@ -204,7 +200,10 @@ const LogScreen = () => {
         return ["essay", "story", "poem"].reduce((acc, k) => acc + (todayEntries[k] ? 1 : 0), 0);
     }, [todayEntries]);
 
+    const selectedEntry = todayEntries[selectedCategory] || null;
+
     const isCompleteDay = completedCount === 3;
+    const isSelectedCategoryDone = Boolean(selectedEntry);
 
     const handleSave = async () => {
         const safeTitle = String(title || "").trim();
@@ -248,7 +247,7 @@ const LogScreen = () => {
 
         Alert.alert(
             "Delete entry?",
-            `Delete today's ${categoryLabel(selectedCategory)} entry?`,
+            `Delete today’s ${categoryLabel(selectedCategory)} entry?`,
             [
                 { text: "Cancel", style: "cancel" },
                 {
@@ -282,217 +281,159 @@ const LogScreen = () => {
         if (missing) setSelectedCategory(missing);
     };
 
-    const selectedEntry = todayEntries[selectedCategory] || null;
+    const pillStyleForCategory = (catKey) => {
+        const done = Boolean(todayEntries[catKey]);
+        const selected = selectedCategory === catKey;
+
+        const styles = [GlobalStyles.pill];
+
+        if (selected) styles.push(GlobalStyles.pillSelected);
+        if (done) styles.push(GlobalStyles.pillSuccess);
+
+        return styles;
+    };
+
+    const pillTextColor = (catKey) => {
+        const done = Boolean(todayEntries[catKey]);
+        if (done) return Colors.text;
+        return Colors.text;
+    };
+
+    const entryCardStyle = () => {
+        if (isSelectedCategoryDone && !isEditing) {
+            return GlobalStyles.cardSuccess;
+        }
+        return GlobalStyles.card;
+    };
 
     return (
-        <SafeAreaView style={{ flex: 1 }}>
-            <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+        <SafeAreaView style={GlobalStyles.screen}>
+            <ScrollView contentContainerStyle={GlobalStyles.content}>
                 <View style={{ gap: 4 }}>
-                    <Text style={{ fontSize: 22, fontWeight: "600" }}>Log</Text>
-                    <Text style={{ opacity: 0.7 }}>
+                    <Text style={GlobalStyles.title}>Log</Text>
+                    <Text style={GlobalStyles.subtitle}>
                         {dayKey} • Daily credit: {completedCount}/3 {isCompleteDay ? "(complete)" : ""}
                     </Text>
                 </View>
 
-                <View
-                    style={{
-                        borderWidth: 1,
-                        borderColor: "#999",
-                        borderRadius: 10,
-                        padding: 12,
-                        gap: 10,
-                    }}
-                >
-                    <Text style={{ fontWeight: "700" }}>Category</Text>
+                <View style={GlobalStyles.card}>
+                    <Text style={GlobalStyles.label}>Category</Text>
 
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                        {CATEGORIES.map((c) => {
-                            const selected = selectedCategory === c.key;
-                            const done = Boolean(todayEntries[c.key]);
-
-                            return (
-                                <Pressable
-                                    key={c.key}
-                                    onPress={() => setSelectedCategory(c.key)}
-                                    style={{
-                                        paddingVertical: 8,
-                                        paddingHorizontal: 12,
-                                        borderWidth: 1,
-                                        borderColor: "#999",
-                                        borderRadius: 999,
-                                        backgroundColor: selected ? "#ddd" : "transparent",
-                                    }}
-                                >
-                                    <Text style={{ fontWeight: "700" }}>
-                                        {c.label}
-                                        {done ? " ✓" : ""}
-                                    </Text>
-                                </Pressable>
-                            );
-                        })}
+                    <View style={GlobalStyles.dividerRow}>
+                        {CATEGORIES.map((c) => (
+                            <Pressable
+                                key={c.key}
+                                onPress={() => setSelectedCategory(c.key)}
+                                style={pillStyleForCategory(c.key)}
+                            >
+                                <Text style={{ fontWeight: "800", color: pillTextColor(c.key) }}>
+                                    {c.label}
+                                    {todayEntries[c.key] ? " ✓" : ""}
+                                </Text>
+                            </Pressable>
+                        ))}
                     </View>
 
-                    <Pressable
-                        onPress={goToNextMissing}
-                        style={{
-                            alignSelf: "flex-start",
-                            paddingVertical: 8,
-                            paddingHorizontal: 12,
-                            borderWidth: 1,
-                            borderColor: "#999",
-                            borderRadius: 8,
-                        }}
-                    >
-                        <Text style={{ fontWeight: "700" }}>Jump to next missing</Text>
+                    <Pressable onPress={goToNextMissing} style={GlobalStyles.button}>
+                        <Text style={GlobalStyles.buttonText}>Jump to next missing</Text>
                     </Pressable>
                 </View>
 
                 {loading ? <ActivityIndicator /> : null}
 
                 {error ? (
-                    <View
-                        style={{
-                            borderWidth: 1,
-                            borderColor: "#999",
-                            borderRadius: 10,
-                            padding: 12,
-                        }}
-                    >
-                        <Text>{error}</Text>
+                    <View style={GlobalStyles.card}>
+                        <Text style={GlobalStyles.text}>{error}</Text>
                     </View>
                 ) : null}
 
-                <View
-                    style={{
-                        borderWidth: 1,
-                        borderColor: "#999",
-                        borderRadius: 10,
-                        padding: 12,
-                        gap: 10,
-                    }}
-                >
-                    <Text style={{ fontWeight: "700" }}>
+                <View style={entryCardStyle()}>
+                    <Text style={GlobalStyles.label}>
                         {selectedEntry ? "Logged" : "Log"}: {categoryLabel(selectedCategory)}
                     </Text>
 
                     {selectedEntry && !isEditing ? (
                         <View style={{ gap: 10 }}>
                             <View style={{ gap: 4 }}>
-                                <Text style={{ fontSize: 16, fontWeight: "800" }}>
+                                <Text style={{ fontSize: 16, fontWeight: "800", color: Colors.text }}>
                                     {selectedEntry.title}
                                 </Text>
 
                                 {selectedEntry.author ? (
-                                    <Text style={{ opacity: 0.8 }}>{selectedEntry.author}</Text>
+                                    <Text style={{ color: Colors.mutedText }}>{selectedEntry.author}</Text>
                                 ) : null}
 
-                                <Text style={{ opacity: 0.7 }}>
+                                <Text style={{ color: Colors.mutedText }}>
                                     Rating: {selectedEntry.rating}
-                                    {selectedEntry.wordCount != null
-                                        ? ` • Words: ${selectedEntry.wordCount}`
-                                        : ""}
+                                    {selectedEntry.wordCount != null ? ` • Words: ${selectedEntry.wordCount}` : ""}
                                 </Text>
                             </View>
 
                             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-                                <Pressable
-                                    onPress={handleEdit}
-                                    style={{
-                                        paddingVertical: 10,
-                                        paddingHorizontal: 12,
-                                        borderWidth: 1,
-                                        borderColor: "#999",
-                                        borderRadius: 8,
-                                    }}
-                                >
-                                    <Text style={{ fontWeight: "800" }}>Edit</Text>
+                                <Pressable onPress={handleEdit} style={GlobalStyles.button}>
+                                    <Text style={GlobalStyles.buttonText}>Edit</Text>
                                 </Pressable>
 
-                                <Pressable
-                                    onPress={handleDelete}
-                                    style={{
-                                        paddingVertical: 10,
-                                        paddingHorizontal: 12,
-                                        borderWidth: 1,
-                                        borderColor: "#999",
-                                        borderRadius: 8,
-                                    }}
-                                >
-                                    <Text style={{ fontWeight: "800" }}>Delete</Text>
+                                <Pressable onPress={handleDelete} style={GlobalStyles.button}>
+                                    <Text style={GlobalStyles.buttonText}>Delete</Text>
                                 </Pressable>
                             </View>
                         </View>
                     ) : (
                         <View style={{ gap: 10 }}>
                             <View style={{ gap: 6 }}>
-                                <Text style={{ fontWeight: "600" }}>Title *</Text>
+                                <Text style={{ fontWeight: "600", color: Colors.text }}>Title *</Text>
                                 <TextInput
                                     value={title}
                                     onChangeText={setTitle}
                                     placeholder="e.g., The Veldt"
-                                    style={{
-                                        borderWidth: 1,
-                                        borderColor: "#999",
-                                        borderRadius: 8,
-                                        padding: 10,
-                                    }}
+                                    placeholderTextColor={Colors.mutedText}
+                                    style={GlobalStyles.input}
                                 />
                             </View>
 
                             <View style={{ gap: 6 }}>
-                                <Text style={{ fontWeight: "600" }}>Author</Text>
+                                <Text style={{ fontWeight: "600", color: Colors.text }}>Author</Text>
                                 <TextInput
                                     value={author}
                                     onChangeText={setAuthor}
                                     placeholder="optional"
-                                    style={{
-                                        borderWidth: 1,
-                                        borderColor: "#999",
-                                        borderRadius: 8,
-                                        padding: 10,
-                                    }}
+                                    placeholderTextColor={Colors.mutedText}
+                                    style={GlobalStyles.input}
                                 />
                             </View>
 
                             <View style={{ gap: 6 }}>
-                                <Text style={{ fontWeight: "600" }}>Tags</Text>
-                                <Text style={{ opacity: 0.7 }}>
+                                <Text style={{ fontWeight: "600", color: Colors.text }}>Tags</Text>
+                                <Text style={GlobalStyles.muted}>
                                     Comma-separated. Year/type tags are auto-added.
                                 </Text>
                                 <TextInput
                                     value={tagsText}
                                     onChangeText={setTagsText}
                                     placeholder="e.g., sci-fi, dystopia"
+                                    placeholderTextColor={Colors.mutedText}
                                     autoCapitalize="none"
                                     autoCorrect={false}
-                                    style={{
-                                        borderWidth: 1,
-                                        borderColor: "#999",
-                                        borderRadius: 8,
-                                        padding: 10,
-                                    }}
+                                    style={GlobalStyles.input}
                                 />
                             </View>
 
                             <View style={{ gap: 6 }}>
-                                <Text style={{ fontWeight: "600" }}>Rating</Text>
-                                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                                <Text style={{ fontWeight: "600", color: Colors.text }}>Rating</Text>
+                                <View style={GlobalStyles.dividerRow}>
                                     {[1, 2, 3, 4, 5].map((n) => {
                                         const selected = rating === n;
                                         return (
                                             <Pressable
                                                 key={n}
                                                 onPress={() => setRating(n)}
-                                                style={{
-                                                    paddingVertical: 8,
-                                                    paddingHorizontal: 12,
-                                                    borderWidth: 1,
-                                                    borderColor: "#999",
-                                                    borderRadius: 999,
-                                                    backgroundColor: selected ? "#ddd" : "transparent",
-                                                }}
+                                                style={[
+                                                    GlobalStyles.pill,
+                                                    selected ? GlobalStyles.pillSelected : null,
+                                                ]}
                                             >
-                                                <Text style={{ fontWeight: "700" }}>{n}</Text>
+                                                <Text style={{ fontWeight: "800", color: Colors.text }}>{n}</Text>
                                             </Pressable>
                                         );
                                     })}
@@ -500,37 +441,26 @@ const LogScreen = () => {
                             </View>
 
                             <View style={{ gap: 6 }}>
-                                <Text style={{ fontWeight: "600" }}>Estimated word count</Text>
+                                <Text style={{ fontWeight: "600", color: Colors.text }}>Estimated word count</Text>
                                 <TextInput
                                     value={wordCount}
                                     onChangeText={setWordCount}
                                     placeholder="optional"
+                                    placeholderTextColor={Colors.mutedText}
                                     keyboardType="number-pad"
-                                    style={{
-                                        borderWidth: 1,
-                                        borderColor: "#999",
-                                        borderRadius: 8,
-                                        padding: 10,
-                                        maxWidth: 180,
-                                    }}
+                                    style={[GlobalStyles.input, { maxWidth: 180 }]}
                                 />
                             </View>
 
                             <View style={{ gap: 6 }}>
-                                <Text style={{ fontWeight: "600" }}>Notes</Text>
+                                <Text style={{ fontWeight: "600", color: Colors.text }}>Notes</Text>
                                 <TextInput
                                     value={notes}
                                     onChangeText={setNotes}
                                     placeholder="optional"
+                                    placeholderTextColor={Colors.mutedText}
                                     multiline
-                                    style={{
-                                        borderWidth: 1,
-                                        borderColor: "#999",
-                                        borderRadius: 8,
-                                        padding: 10,
-                                        minHeight: 90,
-                                        textAlignVertical: "top",
-                                    }}
+                                    style={[GlobalStyles.input, { minHeight: 90, textAlignVertical: "top" }]}
                                 />
                             </View>
 
@@ -538,46 +468,24 @@ const LogScreen = () => {
                                 <Pressable
                                     onPress={handleSave}
                                     disabled={saving}
-                                    style={{
-                                        paddingVertical: 10,
-                                        paddingHorizontal: 12,
-                                        borderWidth: 1,
-                                        borderColor: "#999",
-                                        borderRadius: 8,
-                                        opacity: saving ? 0.6 : 1,
-                                    }}
+                                    style={[
+                                        GlobalStyles.button,
+                                        { opacity: saving ? 0.6 : 1 },
+                                    ]}
                                 >
-                                    <Text style={{ fontWeight: "800" }}>
+                                    <Text style={GlobalStyles.buttonText}>
                                         {saving ? "Saving..." : "Save"}
                                     </Text>
                                 </Pressable>
 
                                 {selectedEntry ? (
-                                    <Pressable
-                                        onPress={() => setIsEditing(false)}
-                                        style={{
-                                            paddingVertical: 10,
-                                            paddingHorizontal: 12,
-                                            borderWidth: 1,
-                                            borderColor: "#999",
-                                            borderRadius: 8,
-                                        }}
-                                    >
-                                        <Text style={{ fontWeight: "800" }}>Cancel</Text>
+                                    <Pressable onPress={() => setIsEditing(false)} style={GlobalStyles.button}>
+                                        <Text style={GlobalStyles.buttonText}>Cancel</Text>
                                     </Pressable>
                                 ) : null}
 
-                                <Pressable
-                                    onPress={handleDelete}
-                                    style={{
-                                        paddingVertical: 10,
-                                        paddingHorizontal: 12,
-                                        borderWidth: 1,
-                                        borderColor: "#999",
-                                        borderRadius: 8,
-                                    }}
-                                >
-                                    <Text style={{ fontWeight: "800" }}>Delete</Text>
+                                <Pressable onPress={handleDelete} style={GlobalStyles.button}>
+                                    <Text style={GlobalStyles.buttonText}>Delete</Text>
                                 </Pressable>
                             </View>
                         </View>

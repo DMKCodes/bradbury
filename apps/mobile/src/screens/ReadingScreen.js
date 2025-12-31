@@ -4,6 +4,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import { Colors, GlobalStyles } from "../theme/theme";
+
 const PREFILL_KEY = "bradbury_log_prefill_v1";
 
 const countWords = (text) => {
@@ -36,7 +38,6 @@ const ReadingScreen = () => {
     const handlePick = async (categoryKey) => {
         const wc = wordCount;
 
-        // Write payload to AsyncStorage.
         const payload = {
             category: categoryKey,
             wordCount: wc,
@@ -49,96 +50,62 @@ const ReadingScreen = () => {
             console.error("[ReadingScreen] Failed to write prefill payload:", err);
         }
 
-        // Discard pasted text.
         setText("");
         setShowPicker(false);
 
-        // Navigate to Log.
         navigation.navigate(LOG_SCREEN_ROUTE_NAME, {
             prefillCategory: categoryKey,
         });
     };
 
     return (
-        <SafeAreaView style={{ flex: 1 }}>
-            <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+        <SafeAreaView style={GlobalStyles.screen}>
+            <ScrollView contentContainerStyle={GlobalStyles.content}>
                 <View style={{ gap: 4 }}>
-                    <Text style={{ fontSize: 22, fontWeight: "600" }}>Reading</Text>
-                    <Text style={{ opacity: 0.7 }}>
+                    <Text style={GlobalStyles.title}>Reading</Text>
+                    <Text style={GlobalStyles.subtitle}>
                         Paste text to calculate word count. Nothing here is saved.
                     </Text>
                 </View>
 
-                <View
-                    style={{
-                        borderWidth: 1,
-                        borderColor: "#999",
-                        borderRadius: 10,
-                        padding: 12,
-                        gap: 10,
-                    }}
-                >
-                    <Text style={{ fontWeight: "700" }}>Paste text</Text>
+                <View style={GlobalStyles.card}>
+                    <Text style={GlobalStyles.label}>Paste text</Text>
 
                     <TextInput
                         value={text}
                         onChangeText={setText}
                         placeholder="Paste article/story/essay/poem text here (temporary)…"
+                        placeholderTextColor={Colors.mutedText}
                         multiline
                         autoCapitalize="none"
                         autoCorrect={false}
-                        style={{
-                            borderWidth: 1,
-                            borderColor: "#999",
-                            borderRadius: 8,
-                            padding: 10,
-                            minHeight: 220,
-                            textAlignVertical: "top",
-                        }}
+                        style={[GlobalStyles.input, { minHeight: 220, textAlignVertical: "top" }]}
                     />
 
                     <View style={{ gap: 2 }}>
-                        <Text style={{ fontWeight: "700" }}>
-                            Word count: {wordCount.toLocaleString()}
+                        <Text style={GlobalStyles.text}>
+                            <Text style={{ fontWeight: "800" }}>Word count:</Text>{" "}
+                            {wordCount.toLocaleString()}
                         </Text>
-                        {wordCount <= 0 ? (
-                            <Text style={{ opacity: 0.7 }}>
-                                Paste some text to enable logging.
-                            </Text>
-                        ) : (
-                            <Text style={{ opacity: 0.7 }}>
-                                Tap “Finished?” to select what you’re logging.
-                            </Text>
-                        )}
+                        <Text style={GlobalStyles.muted}>
+                            Tap “Finished?” to select what you’re logging.
+                        </Text>
                     </View>
 
                     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
                         <Pressable
                             onPress={openPicker}
-                            style={{
-                                paddingVertical: 10,
-                                paddingHorizontal: 12,
-                                borderWidth: 1,
-                                borderColor: "#999",
-                                borderRadius: 8,
-                                opacity: wordCount > 0 ? 1 : 0.5,
-                            }}
+                            style={[
+                                GlobalStyles.button,
+                                { opacity: wordCount > 0 ? 1 : 0.5 },
+                            ]}
                             disabled={wordCount <= 0}
                         >
-                            <Text style={{ fontWeight: "800" }}>Finished?</Text>
+                            <Text style={GlobalStyles.buttonText}>Finished?</Text>
                         </Pressable>
 
-                        <Pressable
-                            onPress={() => setText("")}
-                            style={{
-                                paddingVertical: 10,
-                                paddingHorizontal: 12,
-                                borderWidth: 1,
-                                borderColor: "#999",
-                                borderRadius: 8,
-                            }}
-                        >
-                            <Text style={{ fontWeight: "800" }}>Clear</Text>
+                        <Pressable onPress={() => setText("")} style={GlobalStyles.button}>
+                            <Text style={GlobalStyles.buttonText}>Clear</Text>
                         </Pressable>
                     </View>
                 </View>
@@ -151,25 +118,14 @@ const ReadingScreen = () => {
                             left: 0,
                             right: 0,
                             bottom: 0,
-                            backgroundColor: "rgba(0,0,0,0.35)",
+                            backgroundColor: Colors.overlay,
                             padding: 16,
                             justifyContent: "center",
                         }}
                     >
-                        <View
-                            style={{
-                                backgroundColor: "#fff",
-                                borderRadius: 12,
-                                borderWidth: 1,
-                                borderColor: "#999",
-                                padding: 16,
-                                gap: 12,
-                            }}
-                        >
-                            <Text style={{ fontSize: 18, fontWeight: "800" }}>
-                                Log this reading
-                            </Text>
-                            <Text style={{ opacity: 0.7 }}>
+                        <View style={GlobalStyles.card}>
+                            <Text style={[GlobalStyles.label, { fontSize: 18 }]}>Log this reading</Text>
+                            <Text style={GlobalStyles.muted}>
                                 Word count: {wordCount.toLocaleString()}
                             </Text>
 
@@ -177,29 +133,14 @@ const ReadingScreen = () => {
                                 <Pressable
                                     key={c.key}
                                     onPress={() => handlePick(c.key)}
-                                    style={{
-                                        paddingVertical: 12,
-                                        paddingHorizontal: 12,
-                                        borderWidth: 1,
-                                        borderColor: "#999",
-                                        borderRadius: 10,
-                                    }}
+                                    style={GlobalStyles.button}
                                 >
-                                    <Text style={{ fontWeight: "800" }}>{c.label}</Text>
+                                    <Text style={GlobalStyles.buttonText}>{c.label}</Text>
                                 </Pressable>
                             ))}
 
-                            <Pressable
-                                onPress={() => setShowPicker(false)}
-                                style={{
-                                    paddingVertical: 12,
-                                    paddingHorizontal: 12,
-                                    borderWidth: 1,
-                                    borderColor: "#999",
-                                    borderRadius: 10,
-                                }}
-                            >
-                                <Text style={{ fontWeight: "800" }}>Cancel</Text>
+                            <Pressable onPress={() => setShowPicker(false)} style={GlobalStyles.button}>
+                                <Text style={GlobalStyles.buttonText}>Cancel</Text>
                             </Pressable>
                         </View>
                     </View>

@@ -1,377 +1,402 @@
 import React, { useEffect, useMemo, useState } from "react";
-import {
-    ActivityIndicator,
-    Pressable,
-    ScrollView,
-    Text,
-    TextInput,
-    View,
-} from "react-native";
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { listEntries } from "../lib/store";
+import { deleteEntryForDayCategory, listEntries, upsertEntryForDayCategory } from "../lib/store";
+import { Colors, GlobalStyles } from "../theme/theme";
 
 const CATEGORIES = [
-    { key: "", label: "All" },
+    { key: "All", label: "All" },
     { key: "essay", label: "Essay" },
-    { key: "story", label: "Story" },
+    { key: "story", label: "Short Story" },
     { key: "poem", label: "Poem" },
 ];
 
-const clampRating = (value) => {
-    const n = Number.parseInt(String(value || ""), 10);
-    if (!Number.isFinite(n)) return "";
-    if (n < 1) return "1";
-    if (n > 5) return "5";
-    return String(n);
+const isValidCategory = (c) => ["essay", "story", "poem"].includes(c);
+
+const parseYearFromTags = (tags) => {
+    if (!Array.isArray(tags)) return null;
+    const hit = tags.find((t) => String(t).startsWith("year:"));
+    if (!hit) return null;
+    const y = String(hit).slice("year:".length).trim();
+    return y || null;
 };
 
-const deriveYearsFromEntries = (entries) => {
-    const yearsSet = new Set();
-
-    for (const e of entries) {
-        const dk = String(e.dayKey || "");
-        if (dk.length >= 4) {
-            yearsSet.add(dk.slice(0, 4));
-        }
-    }
-
-    return Array.from(yearsSet).sort((a, b) => (a < b ? 1 : -1));
+const tagsToText = (tags) => {
+    if (!Array.isArray(tags)) return "";
+    const userTags = tags.filter(
+        (t) => !String(t).startsWith("year:") && !String(t).startsWith("type:")
+    );
+    return userTags.join(", ");
 };
 
-const yearToRange = (year) => {
-    if (!year) return {};
-    return {
-        from: `${year}-01-01`,
-        to: `${year}-12-31`,
-    };
+const parseTagsText = (text) => {
+    return String(text || "")
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
 };
 
 const HistoryScreen = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const [items, setItems] = useState([]);
 
-    const [availableYears, setAvailableYears] = useState([]);
+    const [selectedCategory, setSelectedCategory] = useState("All");
+    const [selectedYear, setSelectedYear] = useState("All");
 
-    const [year, setYear] = useState(""); // "" = All
-    const [category, setCategory] = useState("");
-    const [tag, setTag] = useState("");
-    const [search, setSearch] = useState("");
-    const [minRating, setMinRating] = useState("");
+    const [entries, setEntries] = useState([]);
 
-    const queryParams = useMemo(() => {
-        const params = {};
+    const [editing, setEditing] = useState(null); // { dayKey, category }
+    const [editTitle, setEditTitle] = useState("");
+    const [editAuthor, setEditAuthor] = useState("");
+    const [editTagsText, setEditTagsText] = useState("");
+    const [editRating, setEditRating] = useState(5);
+    const [editWordCount, setEditWordCount] = useState("");
+    const [editNotes, setEditNotes] = useState("");
 
-        if (category) params.category = category;
-        if (tag.trim()) params.tag = tag.trim();
-        if (search.trim()) params.search = search.trim();
-        if (minRating) params.minRating = minRating;
-
-        if (year) {
-            const { from, to } = yearToRange(year);
-            params.from = from;
-            params.to = to;
-        }
-
-        return params;
-    }, [category, tag, search, minRating, year]);
-
-    const loadAllAndSetYears = async () => {
+    const load = async () => {
         setLoading(true);
         setError("");
 
         try {
             const all = await listEntries({});
-            setItems(all);
-            setAvailableYears(deriveYearsFromEntries(all));
+            const onlyChallenge = (all || []).filter((e) => isValidCategory(e.category));
+            const sorted = [...onlyChallenge].sort((a, b) => {
+                const ad = String(a.dayKey || "");
+                const bd = String(b.dayKey || "");
+                if (ad !== bd) return ad < bd ? 1 : -1;
+                return String(a.category || "") < String(b.category || "") ? -1 : 1;
+            });
+
+            setEntries(sorted);
         } catch (err) {
             console.error(err);
-            setError("Failed to load entries.");
-            setItems([]);
-            setAvailableYears([]);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const loadFiltered = async (params) => {
-        setLoading(true);
-        setError("");
-
-        try {
-            const result = await listEntries(params);
-            setItems(result);
-        } catch (err) {
-            console.error(err);
-            setError("Failed to load entries.");
-            setItems([]);
+            setError("Failed to load history.");
+            setEntries([]);
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        loadAllAndSetYears();
+        load();
     }, []);
 
-    const applyFilters = () => {
-        loadFiltered(queryParams);
+    const availableYears = useMemo(() => {
+        const years = new Set();
+        for (const e of entries) {
+            const y = parseYearFromTags(e.tags) || (e.dayKey ? String(e.dayKey).slice(0, 4) : null);
+            if (y) years.add(String(y));
+        }
+        return [...years].sort((a, b) => (a < b ? 1 : -1));
+    }, [entries]);
+
+    const filteredEntries = useMemo(() => {
+        return entries.filter((e) => {
+            const catOk = selectedCategory === "All" ? true : e.category === selectedCategory;
+
+            const entryYear = parseYearFromTags(e.tags) || (e.dayKey ? String(e.dayKey).slice(0, 4) : null);
+            const yearOk = selectedYear === "All" ? true : String(entryYear) === String(selectedYear);
+
+            return catOk && yearOk;
+        });
+    }, [entries, selectedCategory, selectedYear]);
+
+    const openEdit = (e) => {
+        setEditing({ dayKey: e.dayKey, category: e.category });
+
+        setEditTitle(e.title || "");
+        setEditAuthor(e.author || "");
+        setEditTagsText(tagsToText(e.tags));
+        setEditRating(Number(e.rating || 5));
+        setEditWordCount(e.wordCount == null ? "" : String(e.wordCount));
+        setEditNotes(e.notes || "");
     };
 
-    const clearFilters = () => {
-        setYear("");
-        setCategory("");
-        setTag("");
-        setSearch("");
-        setMinRating("");
-        loadAllAndSetYears();
+    const closeEdit = () => {
+        setEditing(null);
+        setEditTitle("");
+        setEditAuthor("");
+        setEditTagsText("");
+        setEditRating(5);
+        setEditWordCount("");
+        setEditNotes("");
     };
 
-    const categoryLabel = (key) => {
-        const found = CATEGORIES.find((c) => c.key === key);
-        return found ? found.label : key;
+    const saveEdit = async () => {
+        if (!editing) return;
+
+        const safeTitle = String(editTitle || "").trim();
+        if (!safeTitle) {
+            Alert.alert("Missing title", "Please enter a title.");
+            return;
+        }
+
+        try {
+            await upsertEntryForDayCategory({
+                dayKey: editing.dayKey,
+                category: editing.category,
+                title: safeTitle,
+                author: editAuthor,
+                notes: editNotes,
+                tags: parseTagsText(editTagsText),
+                rating: editRating,
+                wordCount: editWordCount,
+            });
+
+            closeEdit();
+            load();
+        } catch (err) {
+            console.error(err);
+            Alert.alert("Save failed", "Unable to update this entry.");
+        }
+    };
+
+    const deleteEntry = async (e) => {
+        Alert.alert(
+            "Delete entry?",
+            `Delete ${e.category} on ${e.dayKey}?`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            await deleteEntryForDayCategory({ dayKey: e.dayKey, category: e.category });
+                            load();
+                        } catch (err) {
+                            console.error(err);
+                            Alert.alert("Delete failed", "Unable to delete this entry.");
+                        }
+                    },
+                },
+            ]
+        );
     };
 
     return (
-        <SafeAreaView style={{ flex: 1 }}>
-            <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+        <SafeAreaView style={GlobalStyles.screen}>
+            <ScrollView contentContainerStyle={GlobalStyles.content}>
                 <View style={{ gap: 4 }}>
-                    <Text style={{ fontSize: 22, fontWeight: "600" }}>History</Text>
-                    <Text style={{ opacity: 0.7 }}>
-                        Search and filter across all logged entries (local).
+                    <Text style={GlobalStyles.title}>History</Text>
+                    <Text style={GlobalStyles.subtitle}>
+                        Browse and edit your essay/story/poem logs across years.
                     </Text>
                 </View>
 
-                <View
-                    style={{
-                        borderWidth: 1,
-                        borderColor: "#999",
-                        borderRadius: 10,
-                        padding: 12,
-                        gap: 10,
-                    }}
-                >
-                    <Text style={{ fontWeight: "700" }}>Filters</Text>
-
-                    <View style={{ gap: 6 }}>
-                        <Text style={{ fontWeight: "600" }}>Year</Text>
-                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                <View style={GlobalStyles.card}>
+                    <Text style={GlobalStyles.label}>Category</Text>
+                    <View style={GlobalStyles.dividerRow}>
+                        {CATEGORIES.map((c) => (
                             <Pressable
-                                onPress={() => setYear("")}
-                                style={{
-                                    paddingVertical: 8,
-                                    paddingHorizontal: 12,
-                                    borderWidth: 1,
-                                    borderColor: "#999",
-                                    borderRadius: 999,
-                                    backgroundColor: year === "" ? "#ddd" : "transparent",
-                                }}
+                                key={c.key}
+                                onPress={() => setSelectedCategory(c.key)}
+                                style={[
+                                    GlobalStyles.pill,
+                                    selectedCategory === c.key ? GlobalStyles.pillSelected : null,
+                                ]}
                             >
-                                <Text style={{ fontWeight: "600" }}>All</Text>
+                                <Text style={{ fontWeight: "800", color: Colors.text }}>{c.label}</Text>
                             </Pressable>
-
-                            {availableYears.map((y) => (
-                                <Pressable
-                                    key={y}
-                                    onPress={() => setYear(y)}
-                                    style={{
-                                        paddingVertical: 8,
-                                        paddingHorizontal: 12,
-                                        borderWidth: 1,
-                                        borderColor: "#999",
-                                        borderRadius: 999,
-                                        backgroundColor: year === y ? "#ddd" : "transparent",
-                                    }}
-                                >
-                                    <Text style={{ fontWeight: "600" }}>{y}</Text>
-                                </Pressable>
-                            ))}
-                        </View>
-
-                        {!availableYears.length ? (
-                            <Text style={{ opacity: 0.7 }}>
-                                No year data yet. Add a reading entry first.
-                            </Text>
-                        ) : null}
-                    </View>
-
-                    <View style={{ gap: 6 }}>
-                        <Text style={{ fontWeight: "600" }}>Category</Text>
-                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                            {CATEGORIES.map((c) => {
-                                const selected = category === c.key;
-                                return (
-                                    <Pressable
-                                        key={c.key || "all"}
-                                        onPress={() => setCategory(c.key)}
-                                        style={{
-                                            paddingVertical: 8,
-                                            paddingHorizontal: 12,
-                                            borderWidth: 1,
-                                            borderColor: "#999",
-                                            borderRadius: 999,
-                                            backgroundColor: selected ? "#ddd" : "transparent",
-                                        }}
-                                    >
-                                        <Text style={{ fontWeight: "600" }}>{c.label}</Text>
-                                    </Pressable>
-                                );
-                            })}
-                        </View>
-                    </View>
-
-                    <View style={{ gap: 6 }}>
-                        <Text style={{ fontWeight: "600" }}>Tag</Text>
-                        <TextInput
-                            value={tag}
-                            onChangeText={setTag}
-                            placeholder="e.g., horror"
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                            style={{
-                                borderWidth: 1,
-                                borderColor: "#999",
-                                borderRadius: 8,
-                                padding: 10,
-                            }}
-                        />
-                    </View>
-
-                    <View style={{ gap: 6 }}>
-                        <Text style={{ fontWeight: "600" }}>Search</Text>
-                        <TextInput
-                            value={search}
-                            onChangeText={setSearch}
-                            placeholder="title, author, notes..."
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                            style={{
-                                borderWidth: 1,
-                                borderColor: "#999",
-                                borderRadius: 8,
-                                padding: 10,
-                            }}
-                        />
-                    </View>
-
-                    <View style={{ gap: 6 }}>
-                        <Text style={{ fontWeight: "600" }}>Min rating (1–5)</Text>
-                        <TextInput
-                            value={minRating}
-                            onChangeText={(v) => setMinRating(clampRating(v))}
-                            placeholder="e.g., 4"
-                            keyboardType="number-pad"
-                            style={{
-                                borderWidth: 1,
-                                borderColor: "#999",
-                                borderRadius: 8,
-                                padding: 10,
-                                maxWidth: 120,
-                            }}
-                        />
-                    </View>
-
-                    <View style={{ flexDirection: "row", gap: 10 }}>
-                        <Pressable
-                            onPress={applyFilters}
-                            style={{
-                                paddingVertical: 10,
-                                paddingHorizontal: 12,
-                                borderWidth: 1,
-                                borderColor: "#999",
-                                borderRadius: 8,
-                            }}
-                        >
-                            <Text style={{ fontWeight: "700" }}>Apply</Text>
-                        </Pressable>
-
-                        <Pressable
-                            onPress={clearFilters}
-                            style={{
-                                paddingVertical: 10,
-                                paddingHorizontal: 12,
-                                borderWidth: 1,
-                                borderColor: "#999",
-                                borderRadius: 8,
-                            }}
-                        >
-                            <Text style={{ fontWeight: "700" }}>Clear</Text>
-                        </Pressable>
+                        ))}
                     </View>
                 </View>
 
-                {loading ? <ActivityIndicator /> : null}
+                <View style={GlobalStyles.card}>
+                    <Text style={GlobalStyles.label}>Year</Text>
+                    <View style={GlobalStyles.dividerRow}>
+                        <Pressable
+                            onPress={() => setSelectedYear("All")}
+                            style={[
+                                GlobalStyles.pill,
+                                selectedYear === "All" ? GlobalStyles.pillSelected : null,
+                            ]}
+                        >
+                            <Text style={{ fontWeight: "800", color: Colors.text }}>All</Text>
+                        </Pressable>
 
-                {error ? (
-                    <View
-                        style={{
-                            borderWidth: 1,
-                            borderColor: "#999",
-                            borderRadius: 10,
-                            padding: 12,
-                        }}
-                    >
-                        <Text>{error}</Text>
+                        {availableYears.map((y) => (
+                            <Pressable
+                                key={y}
+                                onPress={() => setSelectedYear(y)}
+                                style={[
+                                    GlobalStyles.pill,
+                                    selectedYear === y ? GlobalStyles.pillSelected : null,
+                                ]}
+                            >
+                                <Text style={{ fontWeight: "800", color: Colors.text }}>{y}</Text>
+                            </Pressable>
+                        ))}
+                    </View>
+                </View>
+
+                {loading ? (
+                    <View style={GlobalStyles.card}>
+                        <Text style={GlobalStyles.muted}>Loading...</Text>
                     </View>
                 ) : null}
 
-                {!loading && !error ? (
-                    <View style={{ gap: 10 }}>
-                        <Text style={{ opacity: 0.7 }}>
-                            Showing {items.length} entr{items.length === 1 ? "y" : "ies"}.
+                {error ? (
+                    <View style={GlobalStyles.card}>
+                        <Text style={GlobalStyles.text}>{error}</Text>
+                    </View>
+                ) : null}
+
+                <View style={GlobalStyles.card}>
+                    <Text style={GlobalStyles.label}>
+                        Entries ({filteredEntries.length})
+                    </Text>
+
+                    {filteredEntries.length === 0 ? (
+                        <Text style={GlobalStyles.muted}>
+                            No entries for this filter.
                         </Text>
+                    ) : null}
 
-                        {items.map((x) => (
-                            <View
-                                key={x.id}
-                                style={{
-                                    borderWidth: 1,
-                                    borderColor: "#999",
-                                    borderRadius: 10,
-                                    padding: 12,
-                                    gap: 4,
-                                }}
-                            >
-                                <View
-                                    style={{
-                                        flexDirection: "row",
-                                        justifyContent: "space-between",
-                                        gap: 10,
-                                    }}
-                                >
-                                    <Text style={{ fontWeight: "800" }}>
-                                        {categoryLabel(x.category)}
-                                    </Text>
-                                    <Text style={{ opacity: 0.7 }}>{x.dayKey}</Text>
-                                </View>
-
-                                <Text style={{ fontSize: 16, fontWeight: "600" }}>
-                                    {x.title}
-                                </Text>
-
-                                {x.author ? (
-                                    <Text style={{ opacity: 0.8 }}>{x.author}</Text>
-                                ) : null}
-
-                                <Text style={{ opacity: 0.7 }}>
-                                    Rating: {x.rating}
-                                    {x.wordCount != null ? ` • Words: ${x.wordCount}` : ""}
-                                </Text>
-
-                                {Array.isArray(x.tags) && x.tags.length ? (
-                                    <Text style={{ opacity: 0.7 }}>
-                                        Tags: {x.tags.join(", ")}
-                                    </Text>
-                                ) : null}
-                            </View>
-                        ))}
-
-                        {!items.length ? (
-                            <Text style={{ opacity: 0.7 }}>
-                                No entries match the current filters.
+                    {filteredEntries.map((e) => (
+                        <View
+                            key={`${e.dayKey}_${e.category}`}
+                            style={{
+                                borderTopWidth: 1,
+                                borderTopColor: Colors.border,
+                                paddingTop: 10,
+                                gap: 6,
+                            }}
+                        >
+                            <Text style={{ fontSize: 16, fontWeight: "800", color: Colors.text }}>
+                                {e.title}
                             </Text>
-                        ) : null}
+
+                            <Text style={GlobalStyles.muted}>
+                                {e.dayKey} • {e.category}
+                                {e.rating != null ? ` • Rating: ${e.rating}` : ""}
+                                {e.wordCount != null ? ` • Words: ${e.wordCount}` : ""}
+                            </Text>
+
+                            {e.author ? (
+                                <Text style={GlobalStyles.muted}>{e.author}</Text>
+                            ) : null}
+
+                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+                                <Pressable onPress={() => openEdit(e)} style={GlobalStyles.button}>
+                                    <Text style={GlobalStyles.buttonText}>Edit</Text>
+                                </Pressable>
+
+                                <Pressable onPress={() => deleteEntry(e)} style={GlobalStyles.button}>
+                                    <Text style={GlobalStyles.buttonText}>Delete</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+                    ))}
+                </View>
+
+                {editing ? (
+                    <View
+                        style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            backgroundColor: Colors.overlay,
+                            padding: 16,
+                            justifyContent: "center",
+                        }}
+                    >
+                        <View style={GlobalStyles.card}>
+                            <Text style={[GlobalStyles.label, { fontSize: 18 }]}>Edit entry</Text>
+                            <Text style={GlobalStyles.muted}>
+                                {editing.dayKey} • {editing.category}
+                            </Text>
+
+                            <View style={{ gap: 6 }}>
+                                <Text style={{ fontWeight: "600", color: Colors.text }}>Title *</Text>
+                                <TextInput
+                                    value={editTitle}
+                                    onChangeText={setEditTitle}
+                                    placeholder="Title"
+                                    placeholderTextColor={Colors.mutedText}
+                                    style={GlobalStyles.input}
+                                />
+                            </View>
+
+                            <View style={{ gap: 6 }}>
+                                <Text style={{ fontWeight: "600", color: Colors.text }}>Author</Text>
+                                <TextInput
+                                    value={editAuthor}
+                                    onChangeText={setEditAuthor}
+                                    placeholder="optional"
+                                    placeholderTextColor={Colors.mutedText}
+                                    style={GlobalStyles.input}
+                                />
+                            </View>
+
+                            <View style={{ gap: 6 }}>
+                                <Text style={{ fontWeight: "600", color: Colors.text }}>Tags</Text>
+                                <TextInput
+                                    value={editTagsText}
+                                    onChangeText={setEditTagsText}
+                                    placeholder="comma-separated"
+                                    placeholderTextColor={Colors.mutedText}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    style={GlobalStyles.input}
+                                />
+                            </View>
+
+                            <View style={{ gap: 6 }}>
+                                <Text style={{ fontWeight: "600", color: Colors.text }}>Rating</Text>
+                                <View style={GlobalStyles.dividerRow}>
+                                    {[1, 2, 3, 4, 5].map((n) => (
+                                        <Pressable
+                                            key={n}
+                                            onPress={() => setEditRating(n)}
+                                            style={[
+                                                GlobalStyles.pill,
+                                                editRating === n ? GlobalStyles.pillSelected : null,
+                                            ]}
+                                        >
+                                            <Text style={{ fontWeight: "800", color: Colors.text }}>{n}</Text>
+                                        </Pressable>
+                                    ))}
+                                </View>
+                            </View>
+
+                            <View style={{ gap: 6 }}>
+                                <Text style={{ fontWeight: "600", color: Colors.text }}>Estimated word count</Text>
+                                <TextInput
+                                    value={editWordCount}
+                                    onChangeText={setEditWordCount}
+                                    placeholder="optional"
+                                    placeholderTextColor={Colors.mutedText}
+                                    keyboardType="number-pad"
+                                    style={[GlobalStyles.input, { maxWidth: 180 }]}
+                                />
+                            </View>
+
+                            <View style={{ gap: 6 }}>
+                                <Text style={{ fontWeight: "600", color: Colors.text }}>Notes</Text>
+                                <TextInput
+                                    value={editNotes}
+                                    onChangeText={setEditNotes}
+                                    placeholder="optional"
+                                    placeholderTextColor={Colors.mutedText}
+                                    multiline
+                                    style={[GlobalStyles.input, { minHeight: 90, textAlignVertical: "top" }]}
+                                />
+                            </View>
+
+                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+                                <Pressable onPress={saveEdit} style={GlobalStyles.button}>
+                                    <Text style={GlobalStyles.buttonText}>Save</Text>
+                                </Pressable>
+
+                                <Pressable onPress={closeEdit} style={GlobalStyles.button}>
+                                    <Text style={GlobalStyles.buttonText}>Cancel</Text>
+                                </Pressable>
+                            </View>
+                        </View>
                     </View>
                 ) : null}
             </ScrollView>

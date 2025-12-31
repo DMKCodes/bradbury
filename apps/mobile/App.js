@@ -1,22 +1,42 @@
 import React from "react";
-import { Pressable, Text } from "react-native";
-import { NavigationContainer } from "@react-navigation/native";
+import { Pressable } from "react-native";
+import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { FontAwesome } from "@expo/vector-icons";
+
+import { Colors } from "./src/theme/theme";
 
 import LogScreen from "./src/screens/LogScreen";
 import ReadingScreen from "./src/screens/ReadingScreen";
 import CurriculumScreen from "./src/screens/CurriculumScreen";
 import CurriculumTopicScreen from "./src/screens/CurriculumTopicScreen";
-
 import HistoryScreen from "./src/screens/HistoryScreen";
 import StatsScreen from "./src/screens/StatsScreen";
-import BooksScreen from "./src/screens/BooksScreen";
 import InsightsScreen from "./src/screens/InsightsScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
+import BooksScreen from "./src/screens/BooksScreen";
 
 const Stack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
+
+const AppTheme = {
+    ...DefaultTheme,
+    colors: {
+        ...DefaultTheme.colors,
+        background: Colors.bg,
+        card: Colors.surface,
+        text: Colors.text,
+        border: Colors.border,
+        primary: Colors.accent,
+    },
+};
+
+const headerCommonOptions = {
+    headerStyle: { backgroundColor: Colors.surface },
+    headerTitleStyle: { color: Colors.text },
+    headerTintColor: Colors.text,
+};
 
 const headerRightSettingsButton = (navigation) => {
     return (
@@ -30,18 +50,47 @@ const headerRightSettingsButton = (navigation) => {
                 navigation.navigate("Settings");
             }}
             style={{ paddingHorizontal: 12, paddingVertical: 6 }}
+            hitSlop={10}
         >
-            <Text style={{ fontWeight: "800" }}>Settings</Text>
+            <FontAwesome name="cog" size={20} color={Colors.text} />
         </Pressable>
     );
+};
+
+const getTabIconName = (routeName) => {
+    switch (routeName) {
+        case "Log":
+            return "pencil";
+        case "Reading":
+            return "file-text";
+        case "Insights":
+            return "bar-chart";
+        case "Curriculum":
+            return "graduation-cap";
+        default:
+            return "circle";
+    }
 };
 
 const MainTabs = () => {
     return (
         <Tabs.Navigator
-            screenOptions={{
+            screenOptions={({ route }) => ({
                 headerShown: true,
-            }}
+                ...headerCommonOptions,
+
+                tabBarStyle: {
+                    backgroundColor: Colors.surface,
+                    borderTopColor: Colors.border,
+                },
+                tabBarActiveTintColor: Colors.accent,
+                tabBarInactiveTintColor: Colors.mutedText,
+
+                tabBarIcon: ({ color, size }) => {
+                    const name = getTabIconName(route.name);
+                    return <FontAwesome name={name} size={size ?? 20} color={color} />;
+                },
+            })}
         >
             <Tabs.Screen
                 name="Log"
@@ -83,8 +132,8 @@ const MainTabs = () => {
 
 const App = () => {
     return (
-        <NavigationContainer>
-            <Stack.Navigator>
+        <NavigationContainer theme={AppTheme}>
+            <Stack.Navigator screenOptions={headerCommonOptions}>
                 <Stack.Screen
                     name="Main"
                     component={MainTabs}
@@ -110,15 +159,15 @@ const App = () => {
                 />
 
                 <Stack.Screen
-                    name="CurriculumTopic"
-                    component={CurriculumTopicScreen}
-                    options={{ title: "Topic" }}
-                />
-
-                <Stack.Screen
                     name="Books"
                     component={BooksScreen}
                     options={{ title: "Books" }}
+                />
+
+                <Stack.Screen
+                    name="CurriculumTopic"
+                    component={CurriculumTopicScreen}
+                    options={{ title: "Topic" }}
                 />
             </Stack.Navigator>
         </NavigationContainer>

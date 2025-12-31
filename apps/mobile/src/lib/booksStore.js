@@ -16,12 +16,35 @@ const nowId = (prefix) => {
 };
 
 const getTodayISODate = () => {
-    // YYYY-MM-DD (local device date; good enough for books)
     const d = new Date();
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, "0");
     const dd = String(d.getDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}`;
+};
+
+const normalizeTags = (userTags, year) => {
+    const raw = Array.isArray(userTags) ? userTags : [];
+
+    const cleaned = raw
+        .map((t) => String(t || "").trim())
+        .filter(Boolean)
+        .filter((t) => !t.startsWith("year:") && !t.startsWith("type:"));
+
+    const auto = [`year:${year}`, "type:book"];
+    const merged = [...auto, ...cleaned];
+
+    // De-dupe
+    const seen = new Set();
+    const out = [];
+    for (const t of merged) {
+        const k = t.toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        out.push(t);
+    }
+
+    return out;
 };
 
 const loadBooks = async () => {
@@ -45,7 +68,6 @@ const listBooks = async ({ year } = {}) => {
 
     const filtered = year ? books.filter((b) => String(b.year) === String(year)) : books;
 
-    // newest first (by finishedDate, fallback createdAt)
     return [...filtered].sort((a, b) => {
         const ad = String(a.finishedDate || "");
         const bd = String(b.finishedDate || "");
@@ -85,7 +107,7 @@ const addBook = async ({ title, author, rating, wordCount, tags, notes, finished
         author: String(author || "").trim(),
         rating: Number.isFinite(Number(rating)) ? Number(rating) : 5,
         wordCount: wordCount == null || String(wordCount).trim() === "" ? null : Number(wordCount),
-        tags: Array.isArray(tags) ? tags : [],
+        tags: normalizeTags(tags, year),
         notes: String(notes || "").trim(),
         finishedDate: fd,
         year,
@@ -108,7 +130,6 @@ const updateBook = async (bookId, patch = {}) => {
     if (idx < 0) return { ok: false, error: "not_found" };
 
     const current = books[idx];
-
     const next = {
         ...current,
         ...patch,
@@ -118,6 +139,9 @@ const updateBook = async (bookId, patch = {}) => {
     if (next.finishedDate) {
         next.year = String(next.finishedDate).slice(0, 4);
     }
+
+    const year = String(next.year || "").trim() || String(new Date().getFullYear());
+    next.tags = normalizeTags(next.tags, year);
 
     data.books = [...books.slice(0, idx), next, ...books.slice(idx + 1)];
     await saveBooks(data);

@@ -1,16 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
 
 import { addTopic, deleteTopic, listTopics } from "../lib/curriculumStore";
+import { Colors, GlobalStyles } from "../theme/theme";
 
-const CurriculumScreen = () => {
-    const navigation = useNavigation();
-
+const CurriculumScreen = ({ navigation }) => {
     const [loading, setLoading] = useState(true);
     const [topics, setTopics] = useState([]);
-
     const [newTopic, setNewTopic] = useState("");
 
     const load = async () => {
@@ -70,113 +67,72 @@ const CurriculumScreen = () => {
     };
 
     return (
-        <SafeAreaView style={{ flex: 1 }}>
-            <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+        <SafeAreaView style={GlobalStyles.screen}>
+            <ScrollView contentContainerStyle={GlobalStyles.content}>
                 <View style={{ gap: 4 }}>
-                    <Text style={{ fontSize: 22, fontWeight: "600" }}>Curriculum</Text>
-                    <Text style={{ opacity: 0.7 }}>
-                        Track topics and maintain per-topic reading lists.
+                    <Text style={GlobalStyles.title}>Curriculum</Text>
+                    <Text style={GlobalStyles.subtitle}>
+                        Maintain topics and reading lists (to-do style).
                     </Text>
                 </View>
 
-                <View
-                    style={{
-                        borderWidth: 1,
-                        borderColor: "#999",
-                        borderRadius: 10,
-                        padding: 12,
-                        gap: 10,
-                    }}
-                >
-                    <Text style={{ fontWeight: "800" }}>Add a topic</Text>
+                <View style={GlobalStyles.card}>
+                    <Text style={GlobalStyles.label}>Add a topic</Text>
 
                     <TextInput
                         value={newTopic}
                         onChangeText={setNewTopic}
                         placeholder="e.g., Engineering"
-                        style={{
-                            borderWidth: 1,
-                            borderColor: "#999",
-                            borderRadius: 8,
-                            padding: 10,
-                        }}
+                        placeholderTextColor={Colors.mutedText}
+                        style={GlobalStyles.input}
                     />
 
-                    <Pressable
-                        onPress={handleAdd}
-                        style={{
-                            alignSelf: "flex-start",
-                            paddingVertical: 10,
-                            paddingHorizontal: 12,
-                            borderWidth: 1,
-                            borderColor: "#999",
-                            borderRadius: 8,
-                        }}
-                    >
-                        <Text style={{ fontWeight: "800" }}>Add Topic</Text>
+                    <Pressable onPress={handleAdd} style={GlobalStyles.button}>
+                        <Text style={GlobalStyles.buttonText}>Add Topic</Text>
                     </Pressable>
                 </View>
 
-                <View style={{ gap: 10 }}>
-                    <Text style={{ fontWeight: "800" }}>
+                <View style={GlobalStyles.card}>
+                    <Text style={GlobalStyles.label}>
                         Topics {loading ? "(loading...)" : `(${topics.length})`}
                     </Text>
+
+                    {topics.length === 0 && !loading ? (
+                        <Text style={GlobalStyles.muted}>
+                            No topics yet. Add your first topic above.
+                        </Text>
+                    ) : null}
 
                     {topics.map((t) => (
                         <View
                             key={t.id}
                             style={{
-                                borderWidth: 1,
-                                borderColor: "#999",
-                                borderRadius: 10,
-                                padding: 12,
+                                borderTopWidth: 1,
+                                borderTopColor: Colors.border,
+                                paddingTop: 10,
                                 gap: 8,
                             }}
                         >
                             <Pressable onPress={() => openTopic(t)}>
-                                <Text style={{ fontSize: 16, fontWeight: "800" }}>
+                                <Text style={{ fontSize: 16, fontWeight: "800", color: Colors.text }}>
                                     {t.name}
                                 </Text>
-                                <Text style={{ opacity: 0.7 }}>
+                                <Text style={GlobalStyles.muted}>
                                     {(t.items || []).length} item(s)
                                 </Text>
                             </Pressable>
 
-                            <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
-                                <Pressable
-                                    onPress={() => openTopic(t)}
-                                    style={{
-                                        paddingVertical: 8,
-                                        paddingHorizontal: 10,
-                                        borderWidth: 1,
-                                        borderColor: "#999",
-                                        borderRadius: 8,
-                                    }}
-                                >
-                                    <Text style={{ fontWeight: "800" }}>Open</Text>
+                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+                                <Pressable onPress={() => openTopic(t)} style={GlobalStyles.button}>
+                                    <Text style={GlobalStyles.buttonText}>Open</Text>
                                 </Pressable>
 
-                                <Pressable
-                                    onPress={() => handleDelete(t)}
-                                    style={{
-                                        paddingVertical: 8,
-                                        paddingHorizontal: 10,
-                                        borderWidth: 1,
-                                        borderColor: "#999",
-                                        borderRadius: 8,
-                                    }}
-                                >
-                                    <Text style={{ fontWeight: "800" }}>Delete</Text>
+                                <Pressable onPress={() => handleDelete(t)} style={GlobalStyles.button}>
+                                    <Text style={GlobalStyles.buttonText}>Delete</Text>
                                 </Pressable>
                             </View>
                         </View>
                     ))}
-
-                    {!loading && topics.length === 0 ? (
-                        <Text style={{ opacity: 0.7 }}>
-                            No topics yet. Add your first topic above.
-                        </Text>
-                    ) : null}
                 </View>
             </ScrollView>
         </SafeAreaView>

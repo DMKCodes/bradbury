@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRoute } from "@react-navigation/native";
 
 import {
     addTopicItem,
@@ -9,6 +8,7 @@ import {
     getTopicById,
     toggleTopicItemFinished,
 } from "../lib/curriculumStore";
+import { Colors, GlobalStyles } from "../theme/theme";
 
 const TYPE_OPTIONS = [
     { key: "book", label: "Book" },
@@ -17,8 +17,7 @@ const TYPE_OPTIONS = [
     { key: "poem", label: "Poem" },
 ];
 
-const CurriculumTopicScreen = () => {
-    const route = useRoute();
+const CurriculumTopicScreen = ({ route }) => {
     const topicId = route.params?.topicId;
 
     const [loading, setLoading] = useState(true);
@@ -120,165 +119,124 @@ const CurriculumTopicScreen = () => {
     const items = Array.isArray(topic?.items) ? topic.items : [];
 
     return (
-        <SafeAreaView style={{ flex: 1 }}>
-            <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+        <SafeAreaView style={GlobalStyles.screen}>
+            <ScrollView contentContainerStyle={GlobalStyles.content}>
                 <View style={{ gap: 4 }}>
-                    <Text style={{ fontSize: 22, fontWeight: "600" }}>{header}</Text>
-                    <Text style={{ opacity: 0.7 }}>
-                        Add reading list items and mark them finished.
+                    <Text style={GlobalStyles.title}>{header}</Text>
+                    <Text style={GlobalStyles.subtitle}>
+                        Add items and mark them finished.
                     </Text>
                 </View>
 
-                <View
-                    style={{
-                        borderWidth: 1,
-                        borderColor: "#999",
-                        borderRadius: 10,
-                        padding: 12,
-                        gap: 10,
-                    }}
-                >
-                    <Text style={{ fontWeight: "800" }}>Add item</Text>
+                <View style={GlobalStyles.card}>
+                    <Text style={GlobalStyles.label}>Add item</Text>
 
                     <View style={{ gap: 6 }}>
-                        <Text style={{ fontWeight: "600" }}>Title *</Text>
+                        <Text style={{ fontWeight: "600", color: Colors.text }}>Title *</Text>
                         <TextInput
                             value={title}
                             onChangeText={setTitle}
                             placeholder="e.g., The Design of Everyday Things"
-                            style={{
-                                borderWidth: 1,
-                                borderColor: "#999",
-                                borderRadius: 8,
-                                padding: 10,
-                            }}
+                            placeholderTextColor={Colors.mutedText}
+                            style={GlobalStyles.input}
                         />
                     </View>
 
                     <View style={{ gap: 6 }}>
-                        <Text style={{ fontWeight: "600" }}>URL (optional)</Text>
+                        <Text style={{ fontWeight: "600", color: Colors.text }}>URL (optional)</Text>
                         <TextInput
                             value={url}
                             onChangeText={setUrl}
                             placeholder="https://..."
+                            placeholderTextColor={Colors.mutedText}
                             autoCapitalize="none"
                             autoCorrect={false}
-                            style={{
-                                borderWidth: 1,
-                                borderColor: "#999",
-                                borderRadius: 8,
-                                padding: 10,
-                            }}
+                            style={GlobalStyles.input}
                         />
                     </View>
 
                     <View style={{ gap: 6 }}>
-                        <Text style={{ fontWeight: "600" }}>Type</Text>
-                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                        <Text style={{ fontWeight: "600", color: Colors.text }}>Type</Text>
+                        <View style={GlobalStyles.dividerRow}>
                             {TYPE_OPTIONS.map((t) => {
                                 const selected = type === t.key;
                                 return (
                                     <Pressable
                                         key={t.key}
                                         onPress={() => setType(t.key)}
-                                        style={{
-                                            paddingVertical: 8,
-                                            paddingHorizontal: 12,
-                                            borderWidth: 1,
-                                            borderColor: "#999",
-                                            borderRadius: 999,
-                                            backgroundColor: selected ? "#ddd" : "transparent",
-                                        }}
+                                        style={[
+                                            GlobalStyles.pill,
+                                            selected ? GlobalStyles.pillSelected : null,
+                                        ]}
                                     >
-                                        <Text style={{ fontWeight: "800" }}>{t.label}</Text>
+                                        <Text style={{ fontWeight: "800", color: Colors.text }}>
+                                            {t.label}
+                                        </Text>
                                     </Pressable>
                                 );
                             })}
                         </View>
                     </View>
 
-                    <Pressable
-                        onPress={handleAdd}
-                        style={{
-                            alignSelf: "flex-start",
-                            paddingVertical: 10,
-                            paddingHorizontal: 12,
-                            borderWidth: 1,
-                            borderColor: "#999",
-                            borderRadius: 8,
-                        }}
-                    >
-                        <Text style={{ fontWeight: "800" }}>Add Item</Text>
+                    <Pressable onPress={handleAdd} style={GlobalStyles.button}>
+                        <Text style={GlobalStyles.buttonText}>Add Item</Text>
                     </Pressable>
                 </View>
 
-                <View style={{ gap: 10 }}>
-                    <Text style={{ fontWeight: "800" }}>
+                <View style={GlobalStyles.card}>
+                    <Text style={GlobalStyles.label}>
                         Items {loading ? "(loading...)" : `(${items.length})`}
                     </Text>
 
-                    {items.map((item) => (
-                        <View
-                            key={item.id}
-                            style={{
-                                borderWidth: 1,
-                                borderColor: "#999",
-                                borderRadius: 10,
-                                padding: 12,
-                                gap: 8,
-                            }}
-                        >
-                            <Text style={{ fontSize: 16, fontWeight: "800" }}>
-                                {item.finished ? "✓ " : ""}{item.title}
-                            </Text>
-
-                            <Text style={{ opacity: 0.7 }}>
-                                Type: {TYPE_OPTIONS.find((x) => x.key === item.type)?.label || item.type}
-                            </Text>
-
-                            {item.url ? (
-                                <Pressable onPress={() => openUrl(item.url)}>
-                                    <Text style={{ color: "#1a0dab" }}>{item.url}</Text>
-                                </Pressable>
-                            ) : null}
-
-                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-                                <Pressable
-                                    onPress={() => handleToggle(item)}
-                                    style={{
-                                        paddingVertical: 8,
-                                        paddingHorizontal: 10,
-                                        borderWidth: 1,
-                                        borderColor: "#999",
-                                        borderRadius: 8,
-                                    }}
-                                >
-                                    <Text style={{ fontWeight: "800" }}>
-                                        {item.finished ? "Mark Unfinished" : "Mark Finished"}
-                                    </Text>
-                                </Pressable>
-
-                                <Pressable
-                                    onPress={() => handleDelete(item)}
-                                    style={{
-                                        paddingVertical: 8,
-                                        paddingHorizontal: 10,
-                                        borderWidth: 1,
-                                        borderColor: "#999",
-                                        borderRadius: 8,
-                                    }}
-                                >
-                                    <Text style={{ fontWeight: "800" }}>Delete</Text>
-                                </Pressable>
-                            </View>
-                        </View>
-                    ))}
-
-                    {!loading && items.length === 0 ? (
-                        <Text style={{ opacity: 0.7 }}>
+                    {items.length === 0 && !loading ? (
+                        <Text style={GlobalStyles.muted}>
                             No items yet. Add your first reading list item above.
                         </Text>
                     ) : null}
+
+                    {items.map((item) => {
+                        const finished = Boolean(item.finished);
+
+                        return (
+                            <View
+                                key={item.id}
+                                style={{
+                                    borderTopWidth: 1,
+                                    borderTopColor: Colors.border,
+                                    paddingTop: 10,
+                                    gap: 6,
+                                }}
+                            >
+                                <Text style={{ fontSize: 16, fontWeight: "800", color: Colors.text }}>
+                                    {finished ? "✓ " : ""}{item.title}
+                                </Text>
+
+                                <Text style={GlobalStyles.muted}>
+                                    Type: {TYPE_OPTIONS.find((x) => x.key === item.type)?.label || item.type}
+                                </Text>
+
+                                {item.url ? (
+                                    <Pressable onPress={() => openUrl(item.url)}>
+                                        <Text style={{ color: Colors.accent2 }}>
+                                            {item.url}
+                                        </Text>
+                                    </Pressable>
+                                ) : null}
+
+                                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+                                    <Pressable onPress={() => handleToggle(item)} style={GlobalStyles.button}>
+                                        <Text style={GlobalStyles.buttonText}>
+                                            {finished ? "Mark Unfinished" : "Mark Finished"}
+                                        </Text>
+                                    </Pressable>
+
+                                    <Pressable onPress={() => handleDelete(item)} style={GlobalStyles.button}>
+                                        <Text style={GlobalStyles.buttonText}>Delete</Text>
+                                    </Pressable>
+                                </View>
+                            </View>
+                        );
+                    })}
                 </View>
             </ScrollView>
         </SafeAreaView>

@@ -4,6 +4,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
 
+import { GlobalStyles } from "../theme/theme";
+
 const BRADBURY_PREFIX = "bradbury_";
 
 const SettingsScreen = () => {
@@ -32,10 +34,7 @@ const SettingsScreen = () => {
             const json = JSON.stringify(exportObj, null, 2);
             await Clipboard.setStringAsync(json);
 
-            Alert.alert(
-                "Export copied",
-                `Copied ${targetKeys.length} key(s) to clipboard as JSON.`
-            );
+            Alert.alert("Export copied", `Copied ${targetKeys.length} key(s) to clipboard as JSON.`);
         } catch (err) {
             console.error(err);
             Alert.alert("Export failed", "Unable to export local data.");
@@ -74,62 +73,32 @@ const SettingsScreen = () => {
     };
 
     return (
-        <SafeAreaView style={{ flex: 1 }}>
-            <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+        <SafeAreaView style={GlobalStyles.screen}>
+            <ScrollView contentContainerStyle={GlobalStyles.content}>
                 <View style={{ gap: 4 }}>
-                    <Text style={{ fontSize: 22, fontWeight: "600" }}>Settings</Text>
-                    <Text style={{ opacity: 0.7 }}>
-                        Export/import and app maintenance actions live here.
+                    <Text style={GlobalStyles.title}>Settings</Text>
+                    <Text style={GlobalStyles.subtitle}>
+                        Export and app maintenance actions.
                     </Text>
                 </View>
 
-                <View
-                    style={{
-                        borderWidth: 1,
-                        borderColor: "#999",
-                        borderRadius: 10,
-                        padding: 12,
-                        gap: 10,
-                    }}
-                >
-                    <Text style={{ fontWeight: "800" }}>Data</Text>
+                <View style={GlobalStyles.card}>
+                    <Text style={GlobalStyles.label}>Data</Text>
 
-                    <Pressable
-                        onPress={exportToClipboard}
-                        disabled={busy}
-                        style={{
-                            paddingVertical: 12,
-                            paddingHorizontal: 12,
-                            borderWidth: 1,
-                            borderColor: "#999",
-                            borderRadius: 10,
-                            opacity: busy ? 0.6 : 1,
-                        }}
-                    >
-                        <Text style={{ fontWeight: "800" }}>
+                    <Pressable onPress={exportToClipboard} disabled={busy} style={GlobalStyles.button}>
+                        <Text style={GlobalStyles.buttonText}>
                             {busy ? "Working..." : "Copy Export JSON to Clipboard"}
                         </Text>
-                        <Text style={{ opacity: 0.7 }}>
+                        <Text style={GlobalStyles.muted}>
                             Exports all local keys beginning with ${BRADBURY_PREFIX}.
                         </Text>
                     </Pressable>
 
-                    <Pressable
-                        onPress={clearLocalData}
-                        disabled={busy}
-                        style={{
-                            paddingVertical: 12,
-                            paddingHorizontal: 12,
-                            borderWidth: 1,
-                            borderColor: "#999",
-                            borderRadius: 10,
-                            opacity: busy ? 0.6 : 1,
-                        }}
-                    >
-                        <Text style={{ fontWeight: "800" }}>
+                    <Pressable onPress={clearLocalData} disabled={busy} style={GlobalStyles.button}>
+                        <Text style={GlobalStyles.buttonText}>
                             {busy ? "Working..." : "Clear Local Data"}
                         </Text>
-                        <Text style={{ opacity: 0.7 }}>
+                        <Text style={GlobalStyles.muted}>
                             Deletes all local Bradbury app data from this device.
                         </Text>
                     </Pressable>

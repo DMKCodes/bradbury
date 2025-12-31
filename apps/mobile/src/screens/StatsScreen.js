@@ -1,77 +1,102 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Button, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { getStatsSummary, getTodayDayKeyNY } from "../lib/store";
+import { getTodayDayKeyNY, listEntries } from "../lib/store";
+import { listBooks } from "../lib/booksStore";
+import { Colors, GlobalStyles } from "../theme/theme";
 
-const formatNumber = (n) => {
-    if (n == null || !Number.isFinite(Number(n))) return "—";
-    return Number(n).toLocaleString();
+const TYPE_LABELS = {
+    essay: "Essay",
+    story: "Short Story",
+    poem: "Poem",
+    book: "Book",
 };
 
-const formatAvg = (n) => {
-    if (n == null || !Number.isFinite(Number(n))) return "—";
-    return Number(n).toFixed(2);
+const isValidBradburyType = (t) => ["essay", "story", "poem"].includes(t);
+
+const parseYearFromTags = (tags) => {
+    if (!Array.isArray(tags)) return null;
+    const hit = tags.find((t) => String(t).startsWith("year:"));
+    if (!hit) return null;
+    const y = String(hit).slice("year:".length).trim();
+    return y || null;
 };
 
-const StatBox = ({ title, value, subtitle }) => {
-    return (
-        <View
-            style={{
-                borderWidth: 1,
-                borderColor: "#999",
-                borderRadius: 10,
-                padding: 12,
-                gap: 6,
-            }}
-        >
-            <Text style={{ fontWeight: "600" }}>{title}</Text>
-            <Text style={{ fontSize: 26, fontWeight: "600" }}>{value}</Text>
-            {subtitle ? <Text style={{ opacity: 0.7 }}>{subtitle}</Text> : null}
-        </View>
-    );
+const safeInt = (v) => {
+    const n = Number.parseInt(String(v), 10);
+    return Number.isFinite(n) ? n : null;
 };
 
-const TypeRow = ({ label, stats }) => {
-    return (
-        <View style={{ gap: 2 }}>
-            <Text style={{ fontWeight: "700" }}>{label}</Text>
-            <Text style={{ opacity: 0.7 }}>
-                Finished: {formatNumber(stats?.entriesCount)} • Words: {formatNumber(stats?.totalWords)} • Avg:{" "}
-                {formatAvg(stats?.avgRating)}
-            </Text>
-        </View>
-    );
+const safeNum = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+};
+
+const dayKeyToUTCDate = (dayKey) => {
+    const [y, m, d] = String(dayKey).split("-").map((x) => Number.parseInt(x, 10));
+    if (!y || !m || !d) return null;
+    return new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
+};
+
+const prevDayKey = (dayKey) => {
+    const dt = dayKeyToUTCDate(dayKey);
+    if (!dt) return dayKey;
+
+    dt.setUTCDate(dt.getUTCDate() - 1);
+    const yyyy = dt.getUTCFullYear();
+    const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getUTCDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+};
+
+const computeCurrentStreak = (completeDaySet, todayKey) => {
+    let streak = 0;
+    let cursor = todayKey;
+
+    while (completeDaySet.has(cursor)) {
+        streak += 1;
+        cursor = prevDayKey(cursor);
+    }
+
+    return streak;
+};
+
+const initTypeAgg = () => {
+    return {
+        count: 0,
+        ratingSum: 0,
+        ratingCount: 0,
+        wordSum: 0,
+        wordCount: 0,
+    };
 };
 
 const StatsScreen = () => {
-    const currentYear = useMemo(() => String(getTodayDayKeyNY()).slice(0, 4), []);
-
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const [data, setData] = useState(null);
 
-    const [selectedYear, setSelectedYear] = useState("global"); // "global" or "YYYY"
+    const [selectedYear, setSelectedYear] = useState("All");
+
+    const [challengeEntries, setChallengeEntries] = useState([]);
+    const [books, setBooks] = useState([]);
 
     const load = async () => {
         setLoading(true);
         setError("");
 
         try {
-            const result = await getStatsSummary({});
-            setData(result);
+            const allEntries = await listEntries({});
+            const onlyChallenge = (allEntries || []).filter((e) => isValidBradburyType(e.category));
+            setChallengeEntries(onlyChallenge);
 
-            // Default selection: current year if present, else global
-            const years = Array.isArray(result?.availableYears) ? result.availableYears : [];
-            if (years.includes(currentYear)) {
-                setSelectedYear(currentYear);
-            } else {
-                setSelectedYear("global");
-            }
+            const allBooks = await listBooks({});
+            setBooks(allBooks || []);
         } catch (err) {
             console.error(err);
-            setError("Failed to load stats.");
-            setData(null);
+            setError("Failed to load stats data.");
+            setChallengeEntries([]);
+            setBooks([]);
         } finally {
             setLoading(false);
         }
@@ -79,150 +104,306 @@ const StatsScreen = () => {
 
     useEffect(() => {
         load();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const availableYears = Array.isArray(data?.availableYears) ? data.availableYears : [];
+    const availableYears = useMemo(() => {
+        const years = new Set();
 
-    const activeStats =
-        selectedYear === "global"
-            ? data?.global
-            : data?.byYear && data.byYear[selectedYear]
-                ? data.byYear[selectedYear]
-                : data?.global;
+        for (const e of challengeEntries) {
+            const y = parseYearFromTags(e.tags) || (e.dayKey ? String(e.dayKey).slice(0, 4) : null);
+            if (y) years.add(String(y));
+        }
 
-    const totals = activeStats?.totals || {};
-    const byType = activeStats?.byType || {};
+        for (const b of books) {
+            const y = String(b.year || "").trim();
+            if (y) years.add(y);
+        }
 
-    const streak = data?.streak || {};
-    const badges = Array.isArray(data?.badges) ? data.badges : [];
+        return [...years].sort((a, b) => (a < b ? 1 : -1));
+    }, [challengeEntries, books]);
+
+    const yearFilteredChallenge = useMemo(() => {
+        if (selectedYear === "All") return challengeEntries;
+
+        return challengeEntries.filter((e) => {
+            const y = parseYearFromTags(e.tags) || (e.dayKey ? String(e.dayKey).slice(0, 4) : null);
+            return String(y) === String(selectedYear);
+        });
+    }, [challengeEntries, selectedYear]);
+
+    const yearFilteredBooks = useMemo(() => {
+        if (selectedYear === "All") return books;
+        return books.filter((b) => String(b.year) === String(selectedYear));
+    }, [books, selectedYear]);
+
+    const unifiedItems = useMemo(() => {
+        const fromChallenge = yearFilteredChallenge.map((e) => {
+            const y = parseYearFromTags(e.tags) || (e.dayKey ? String(e.dayKey).slice(0, 4) : null);
+
+            return {
+                kind: "challenge",
+                type: e.category,
+                year: y,
+                rating: safeNum(e.rating),
+                wordCount: safeInt(e.wordCount),
+            };
+        });
+
+        const fromBooks = yearFilteredBooks.map((b) => {
+            return {
+                kind: "book",
+                type: "book",
+                year: b.year,
+                rating: safeNum(b.rating),
+                wordCount: safeInt(b.wordCount),
+            };
+        });
+
+        return [...fromChallenge, ...fromBooks];
+    }, [yearFilteredChallenge, yearFilteredBooks]);
+
+    const countsByType = useMemo(() => {
+        const counts = { essay: 0, story: 0, poem: 0, book: 0 };
+        for (const it of unifiedItems) {
+            if (counts[it.type] == null) continue;
+            counts[it.type] += 1;
+        }
+        return counts;
+    }, [unifiedItems]);
+
+    const totals = useMemo(() => {
+        let totalWords = 0;
+        let totalRatings = 0;
+        let ratingCount = 0;
+
+        for (const it of unifiedItems) {
+            if (it.wordCount != null) totalWords += it.wordCount;
+
+            if (it.rating != null) {
+                totalRatings += it.rating;
+                ratingCount += 1;
+            }
+        }
+
+        const avgRating = ratingCount > 0 ? totalRatings / ratingCount : null;
+
+        return {
+            totalWords,
+            avgRating,
+            ratingCount,
+        };
+    }, [unifiedItems]);
+
+    const perTypeAverages = useMemo(() => {
+        const agg = {
+            essay: initTypeAgg(),
+            story: initTypeAgg(),
+            poem: initTypeAgg(),
+            book: initTypeAgg(),
+        };
+
+        for (const it of unifiedItems) {
+            if (!agg[it.type]) continue;
+
+            agg[it.type].count += 1;
+
+            if (it.rating != null) {
+                agg[it.type].ratingSum += it.rating;
+                agg[it.type].ratingCount += 1;
+            }
+
+            if (it.wordCount != null) {
+                agg[it.type].wordSum += it.wordCount;
+                agg[it.type].wordCount += 1;
+            }
+        }
+
+        const out = {};
+        for (const key of Object.keys(agg)) {
+            const a = agg[key];
+            out[key] = {
+                count: a.count,
+                avgRating: a.ratingCount > 0 ? a.ratingSum / a.ratingCount : null,
+                avgWords: a.wordCount > 0 ? a.wordSum / a.wordCount : null,
+                ratedCount: a.ratingCount,
+                wordsCount: a.wordCount,
+            };
+        }
+
+        return out;
+    }, [unifiedItems]);
+
+    const challengeStreakStats = useMemo(() => {
+        const dayToTypes = new Map();
+
+        for (const e of yearFilteredChallenge) {
+            const dayKey = e.dayKey;
+            if (!dayKey) continue;
+
+            if (!dayToTypes.has(dayKey)) {
+                dayToTypes.set(dayKey, new Set());
+            }
+            dayToTypes.get(dayKey).add(e.category);
+        }
+
+        const completeDays = new Set();
+        for (const [dayKey, types] of dayToTypes.entries()) {
+            if (types.has("essay") && types.has("story") && types.has("poem")) {
+                completeDays.add(dayKey);
+            }
+        }
+
+        const todayKey = getTodayDayKeyNY();
+        const currentStreak = computeCurrentStreak(completeDays, todayKey);
+
+        return {
+            completeDayCount: completeDays.size,
+            currentStreak,
+        };
+    }, [yearFilteredChallenge]);
+
+    const formatAvg = (n) => {
+        if (n == null) return "—";
+        return n.toFixed(2);
+    };
+
+    const formatAvgWords = (n) => {
+        if (n == null) return "—";
+        return Math.round(n).toLocaleString();
+    };
 
     return (
-        <SafeAreaView style={{ flex: 1 }}>
-            <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+        <SafeAreaView style={GlobalStyles.screen}>
+            <ScrollView contentContainerStyle={GlobalStyles.content}>
                 <View style={{ gap: 4 }}>
-                    <Text style={{ fontSize: 22, fontWeight: "600" }}>Stats</Text>
-                    <Text style={{ opacity: 0.7 }}>
-                        View global (all years) or a single year. “Finished” counts reflect saved readings.
+                    <Text style={GlobalStyles.title}>Stats</Text>
+                    <Text style={GlobalStyles.subtitle}>
+                        Includes books in totals; streak remains Bradbury-only.
                     </Text>
                 </View>
 
-                <Button title="Refresh" onPress={load} />
+                <View style={GlobalStyles.card}>
+                    <Text style={GlobalStyles.label}>Year</Text>
+
+                    <View style={GlobalStyles.dividerRow}>
+                        <Pressable
+                            onPress={() => setSelectedYear("All")}
+                            style={[
+                                GlobalStyles.pill,
+                                selectedYear === "All" ? GlobalStyles.pillSelected : null,
+                            ]}
+                        >
+                            <Text style={GlobalStyles.text}>All</Text>
+                        </Pressable>
+
+                        {availableYears.map((y) => (
+                            <Pressable
+                                key={y}
+                                onPress={() => setSelectedYear(y)}
+                                style={[
+                                    GlobalStyles.pill,
+                                    selectedYear === y ? GlobalStyles.pillSelected : null,
+                                ]}
+                            >
+                                <Text style={GlobalStyles.text}>{y}</Text>
+                            </Pressable>
+                        ))}
+                    </View>
+                </View>
 
                 {loading ? <ActivityIndicator /> : null}
 
                 {error ? (
-                    <View
-                        style={{
-                            borderWidth: 1,
-                            borderColor: "#999",
-                            borderRadius: 10,
-                            padding: 12,
-                        }}
-                    >
-                        <Text>{error}</Text>
+                    <View style={GlobalStyles.card}>
+                        <Text style={GlobalStyles.text}>{error}</Text>
                     </View>
                 ) : null}
 
-                {!loading && !error ? (
-                    <View style={{ gap: 12 }}>
-                        <View
-                            style={{
-                                borderWidth: 1,
-                                borderColor: "#999",
-                                borderRadius: 10,
-                                padding: 12,
-                                gap: 10,
-                            }}
-                        >
-                            <Text style={{ fontWeight: "700" }}>Scope</Text>
+                <View style={GlobalStyles.card}>
+                    <Text style={GlobalStyles.label}>Bradbury Challenge</Text>
 
-                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                                <Pressable
-                                    onPress={() => setSelectedYear("global")}
-                                    style={{
-                                        paddingVertical: 8,
-                                        paddingHorizontal: 12,
-                                        borderWidth: 1,
-                                        borderColor: "#999",
-                                        borderRadius: 999,
-                                        backgroundColor: selectedYear === "global" ? "#ddd" : "transparent",
-                                    }}
-                                >
-                                    <Text style={{ fontWeight: "600" }}>All years</Text>
-                                </Pressable>
+                    <Text style={GlobalStyles.muted}>
+                        Current streak:{" "}
+                        <Text style={{ fontWeight: "800", color: Colors.text }}>
+                            {challengeStreakStats.currentStreak}
+                        </Text>
+                    </Text>
 
-                                {availableYears.map((y) => (
-                                    <Pressable
-                                        key={y}
-                                        onPress={() => setSelectedYear(y)}
-                                        style={{
-                                            paddingVertical: 8,
-                                            paddingHorizontal: 12,
-                                            borderWidth: 1,
-                                            borderColor: "#999",
-                                            borderRadius: 999,
-                                            backgroundColor: selectedYear === y ? "#ddd" : "transparent",
-                                        }}
-                                    >
-                                        <Text style={{ fontWeight: "600" }}>{y}</Text>
-                                    </Pressable>
-                                ))}
+                    <Text style={GlobalStyles.muted}>
+                        Completed days (essay+story+poem):{" "}
+                        <Text style={{ fontWeight: "800", color: Colors.text }}>
+                            {challengeStreakStats.completeDayCount}
+                        </Text>
+                    </Text>
+                </View>
+
+                <View style={GlobalStyles.card}>
+                    <Text style={GlobalStyles.label}>Finished counts</Text>
+
+                    {Object.keys(TYPE_LABELS).map((k) => (
+                        <Text key={k} style={GlobalStyles.muted}>
+                            {TYPE_LABELS[k]}:{" "}
+                            <Text style={{ fontWeight: "800", color: Colors.text }}>
+                                {countsByType[k] || 0}
+                            </Text>
+                        </Text>
+                    ))}
+                </View>
+
+                <View style={GlobalStyles.card}>
+                    <Text style={GlobalStyles.label}>Totals (including books)</Text>
+
+                    <Text style={GlobalStyles.muted}>
+                        Total estimated words:{" "}
+                        <Text style={{ fontWeight: "800", color: Colors.text }}>
+                            {totals.totalWords.toLocaleString()}
+                        </Text>
+                    </Text>
+
+                    <Text style={GlobalStyles.muted}>
+                        Average rating:{" "}
+                        <Text style={{ fontWeight: "800", color: Colors.text }}>
+                            {formatAvg(totals.avgRating)}
+                        </Text>{" "}
+                        <Text style={GlobalStyles.muted}>({totals.ratingCount} rated item(s))</Text>
+                    </Text>
+                </View>
+
+                <View style={GlobalStyles.card}>
+                    <Text style={GlobalStyles.label}>Per-type averages</Text>
+
+                    {Object.keys(TYPE_LABELS).map((k) => {
+                        const a = perTypeAverages[k];
+
+                        return (
+                            <View key={k} style={{ gap: 4, marginTop: 8 }}>
+                                <Text style={{ fontWeight: "800", color: Colors.accent }}>
+                                    {TYPE_LABELS[k]}
+                                </Text>
+
+                                <Text style={GlobalStyles.muted}>
+                                    Avg rating:{" "}
+                                    <Text style={{ fontWeight: "800", color: Colors.text }}>
+                                        {formatAvg(a.avgRating)}
+                                    </Text>{" "}
+                                    <Text style={GlobalStyles.muted}>
+                                        ({a.ratedCount} rated / {a.count} total)
+                                    </Text>
+                                </Text>
+
+                                <Text style={GlobalStyles.muted}>
+                                    Avg words:{" "}
+                                    <Text style={{ fontWeight: "800", color: Colors.text }}>
+                                        {formatAvgWords(a.avgWords)}
+                                    </Text>{" "}
+                                    <Text style={GlobalStyles.muted}>
+                                        ({a.wordsCount} with word counts / {a.count} total)
+                                    </Text>
+                                </Text>
                             </View>
-                        </View>
-
-                        <StatBox
-                            title="Current streak"
-                            value={formatNumber(streak.currentStreakDays)}
-                            subtitle="Complete days in a row (essay + story + poem)"
-                        />
-
-                        <StatBox title="Finished readings" value={formatNumber(totals.entriesCount)} />
-
-                        <StatBox title="Total estimated words" value={formatNumber(totals.totalWords)} />
-
-                        <StatBox title="Average rating" value={formatAvg(totals.averageRating)} />
-
-                        <View
-                            style={{
-                                borderWidth: 1,
-                                borderColor: "#999",
-                                borderRadius: 10,
-                                padding: 12,
-                                gap: 8,
-                            }}
-                        >
-                            <Text style={{ fontWeight: "700" }}>Finished by content type</Text>
-
-                            <TypeRow label="Essay" stats={byType.essay} />
-                            <TypeRow label="Short Story" stats={byType.short_story} />
-                            <TypeRow label="Poem" stats={byType.poem} />
-                            <TypeRow label="Book" stats={byType.book} />
-                        </View>
-
-                        <View
-                            style={{
-                                borderWidth: 1,
-                                borderColor: "#999",
-                                borderRadius: 10,
-                                padding: 12,
-                                gap: 8,
-                            }}
-                        >
-                            <Text style={{ fontWeight: "700" }}>Badges earned</Text>
-                            {badges.length ? (
-                                badges.map((b) => (
-                                    <View key={b.key} style={{ gap: 2 }}>
-                                        <Text style={{ fontWeight: "700" }}>{b.label}</Text>
-                                        <Text style={{ opacity: 0.7 }}>{b.description}</Text>
-                                    </View>
-                                ))
-                            ) : (
-                                <Text style={{ opacity: 0.7 }}>No badges yet.</Text>
-                            )}
-                        </View>
-                    </View>
-                ) : null}
+                        );
+                    })}
+                </View>
             </ScrollView>
         </SafeAreaView>
     );
