@@ -7,8 +7,6 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 
-
-
 import {
     getCurrentProfile,
     resetAllLocalData,
@@ -21,6 +19,8 @@ import LogScreen from "././src/screens/LogScreen";
 import StatsScreen from "./src/screens/StatsScreen";
 import HistoryScreen from "./src/screens/HistoryScreen";
 import ReadingScreen from "./src/screens/ReadingScreen";
+import CurriculumScreen from "./src/screens/CurriculumScreen";
+import CurriculumTopicScreen from "./src/screens/CurriculumTopicScreen";
 
 const Stack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
@@ -78,6 +78,8 @@ const MainTabs = ({ profile, onSwitchProfile, onResetData, onExportData }) => {
             </Tabs.Screen>
 
             <Tabs.Screen name="Read" component={ReadingScreen} />
+
+            <Tabs.Screen name="Curriculum" component={CurriculumScreen} />
 
             <Tabs.Screen name="History" component={HistoryScreen} />
 
@@ -173,6 +175,11 @@ const App = () => {
                             )}
                         </Stack.Screen>
                     )}
+                    <Stack.Screen
+                        name="CurriculumTopic"
+                        component={CurriculumTopicScreen}
+                        options={{ title: "Topic" }}
+                    />
                 </Stack.Navigator>
             </NavigationContainer>
         </SafeAreaProvider>
