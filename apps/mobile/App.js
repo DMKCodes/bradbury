@@ -17,9 +17,10 @@ import {
 } from "./src/lib/store";
 
 import ProfileScreen from "./src/screens/ProfileScreen";
-import TodayScreen from "./src/screens/TodayScreen";
+import LogScreen from "././src/screens/LogScreen";
 import StatsScreen from "./src/screens/StatsScreen";
 import HistoryScreen from "./src/screens/HistoryScreen";
+import ReadingScreen from "./src/screens/ReadingScreen";
 
 const Stack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
@@ -72,9 +73,11 @@ const AccountScreen = ({
 const MainTabs = ({ profile, onSwitchProfile, onResetData, onExportData }) => {
     return (
         <Tabs.Navigator>
-            <Tabs.Screen name="Today">
-                {() => <TodayScreen profile={profile} />}
+            <Tabs.Screen name="Log">
+                {() => <LogScreen profile={profile} />}
             </Tabs.Screen>
+
+            <Tabs.Screen name="Read" component={ReadingScreen} />
 
             <Tabs.Screen name="History" component={HistoryScreen} />
 

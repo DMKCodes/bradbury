@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -9,6 +9,8 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect, useRoute } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import {
     deleteEntryForDayCategory,
@@ -16,6 +18,8 @@ import {
     listEntries,
     upsertEntryForDayCategory,
 } from "../lib/store";
+
+const PREFILL_KEY = "bradbury_log_prefill_v1";
 
 const CATEGORIES = [
     { key: "essay", label: "Essay" },
@@ -43,7 +47,11 @@ const tagsToText = (tags) => {
     return userTags.join(", ");
 };
 
-const TodayScreen = () => {
+const isValidCategory = (c) => ["essay", "story", "poem"].includes(c);
+
+const LogScreen = () => {
+    const route = useRoute();
+
     const dayKey = useMemo(() => getTodayDayKeyNY(), []);
 
     const [loading, setLoading] = useState(true);
@@ -65,6 +73,8 @@ const TodayScreen = () => {
     const [rating, setRating] = useState(5);
     const [wordCount, setWordCount] = useState("");
     const [notes, setNotes] = useState("");
+
+    const [pendingPrefill, setPendingPrefill] = useState(null);
 
     const loadToday = async () => {
         setLoading(true);
@@ -113,16 +123,82 @@ const TodayScreen = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // A) Standard behavior when category/entries change.
     useEffect(() => {
         const existing = todayEntries[selectedCategory] || null;
 
-        // - If entry, show collapsed view.
-        // - If no entry, show entry form.
         setIsEditing(!existing);
-
         prefillFromEntry(existing);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedCategory, todayEntries.essay, todayEntries.story, todayEntries.poem]);
+
+    // or B) Apply incoming prefill AFTER the standard prefill.
+    useEffect(() => {
+        if (!pendingPrefill) return;
+        if (pendingPrefill.category !== selectedCategory) return;
+
+        setIsEditing(true);
+        setWordCount(String(pendingPrefill.wordCount));
+        setPendingPrefill(null);
+    }, [pendingPrefill, selectedCategory]);
+
+    // On focus: read AsyncStorage handoff payload, then apply it.
+    useFocusEffect(
+        useCallback(() => {
+            let alive = true;
+
+            const run = async () => {
+                try {
+                    const raw = await AsyncStorage.getItem(PREFILL_KEY);
+                    if (!raw) return;
+
+                    const payload = JSON.parse(raw);
+                    await AsyncStorage.removeItem(PREFILL_KEY);
+
+                    if (!alive) return;
+
+                    const cat = isValidCategory(payload?.category) ? payload.category : null;
+                    const wc = Number.parseInt(String(payload?.wordCount ?? ""), 10);
+
+                    if (cat) {
+                        setSelectedCategory(cat);
+                    }
+
+                    if (Number.isFinite(wc) && wc > 0) {
+                        // Queue to apply after prefillFromEntry.
+                        setPendingPrefill({
+                            category: cat || selectedCategory,
+                            wordCount: wc,
+                        });
+                    }
+
+                    setIsEditing(true);
+                } catch (err) {
+                    console.error("[LogScreen] Failed to read/parse prefill payload:", err);
+                    try {
+                        await AsyncStorage.removeItem(PREFILL_KEY);
+                    } catch {
+                        // ignore
+                    }
+                }
+            };
+
+            run();
+
+            return () => {
+                alive = false;
+            };
+        }, [selectedCategory])
+    );
+
+    useEffect(() => {
+        const catRaw = route.params?.prefillCategory;
+        if (!catRaw) return;
+
+        if (isValidCategory(catRaw)) {
+            setSelectedCategory(catRaw);
+        }
+    }, [route.params?.prefillCategory]);
 
     const completedCount = useMemo(() => {
         return ["essay", "story", "poem"].reduce((acc, k) => acc + (todayEntries[k] ? 1 : 0), 0);
@@ -152,8 +228,6 @@ const TodayScreen = () => {
             });
 
             await loadToday();
-
-            // After saving, collapse.
             setIsEditing(false);
 
             Alert.alert("Saved", `${categoryLabel(selectedCategory)} saved for ${dayKey}.`);
@@ -174,7 +248,7 @@ const TodayScreen = () => {
 
         Alert.alert(
             "Delete entry?",
-            `Delete today’s ${categoryLabel(selectedCategory)} entry?`,
+            `Delete today's ${categoryLabel(selectedCategory)} entry?`,
             [
                 { text: "Cancel", style: "cancel" },
                 {
@@ -184,10 +258,7 @@ const TodayScreen = () => {
                         try {
                             await deleteEntryForDayCategory({ dayKey, category: selectedCategory });
                             await loadToday();
-
-                            // After deleting, re-open form for this category.
                             setIsEditing(true);
-
                             Alert.alert("Deleted", "Entry deleted.");
                         } catch (err) {
                             console.error(err);
@@ -217,7 +288,7 @@ const TodayScreen = () => {
         <SafeAreaView style={{ flex: 1 }}>
             <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
                 <View style={{ gap: 4 }}>
-                    <Text style={{ fontSize: 22, fontWeight: "600" }}>Today</Text>
+                    <Text style={{ fontSize: 22, fontWeight: "600" }}>Log</Text>
                     <Text style={{ opacity: 0.7 }}>
                         {dayKey} • Daily credit: {completedCount}/3 {isCompleteDay ? "(complete)" : ""}
                     </Text>
@@ -304,7 +375,6 @@ const TodayScreen = () => {
                         {selectedEntry ? "Logged" : "Log"}: {categoryLabel(selectedCategory)}
                     </Text>
 
-                    {/* COLLAPSED VIEW (saved entry) */}
                     {selectedEntry && !isEditing ? (
                         <View style={{ gap: 10 }}>
                             <View style={{ gap: 4 }}>
@@ -322,19 +392,6 @@ const TodayScreen = () => {
                                         ? ` • Words: ${selectedEntry.wordCount}`
                                         : ""}
                                 </Text>
-
-                                {Array.isArray(selectedEntry.tags) && selectedEntry.tags.length ? (
-                                    <Text style={{ opacity: 0.7 }}>
-                                        Tags:{" "}
-                                        {selectedEntry.tags
-                                            .filter(
-                                                (t) =>
-                                                    !String(t).startsWith("year:") &&
-                                                    !String(t).startsWith("type:")
-                                            )
-                                            .join(", ") || "—"}
-                                    </Text>
-                                ) : null}
                             </View>
 
                             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
@@ -365,10 +422,7 @@ const TodayScreen = () => {
                                 </Pressable>
                             </View>
                         </View>
-                    ) : null}
-
-                    {/* EDIT FORM (new or editing) */}
-                    {(!selectedEntry || isEditing) ? (
+                    ) : (
                         <View style={{ gap: 10 }}>
                             <View style={{ gap: 6 }}>
                                 <Text style={{ fontWeight: "600" }}>Title *</Text>
@@ -527,41 +581,11 @@ const TodayScreen = () => {
                                 </Pressable>
                             </View>
                         </View>
-                    ) : null}
-                </View>
-
-                <View
-                    style={{
-                        borderWidth: 1,
-                        borderColor: "#999",
-                        borderRadius: 10,
-                        padding: 12,
-                        gap: 8,
-                    }}
-                >
-                    <Text style={{ fontWeight: "700" }}>Today’s saved entries</Text>
-
-                    {["essay", "story", "poem"].map((k) => {
-                        const e = todayEntries[k];
-                        return (
-                            <View key={k} style={{ gap: 2 }}>
-                                <Text style={{ fontWeight: "800" }}>
-                                    {categoryLabel(k)}: {e ? "Saved" : "Missing"}
-                                </Text>
-                                {e ? (
-                                    <Text style={{ opacity: 0.7 }}>
-                                        {e.title}
-                                        {e.wordCount != null ? ` • ${e.wordCount} words` : ""}
-                                        {e.rating ? ` • ${e.rating}/5` : ""}
-                                    </Text>
-                                ) : null}
-                            </View>
-                        );
-                    })}
+                    )}
                 </View>
             </ScrollView>
         </SafeAreaView>
     );
 };
 
-export default TodayScreen;
+export default LogScreen;
