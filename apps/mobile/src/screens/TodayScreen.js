@@ -11,269 +11,187 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+    deleteEntryForDayCategory,
     getTodayDayKeyNY,
     listEntries,
     upsertEntryForDayCategory,
-    deleteEntryForDayCategory,
 } from "../lib/store";
 
 const CATEGORIES = [
-    { key: "essay", label: "Essay (Nonfiction)" },
-    { key: "story", label: "Short Story (Fiction)" },
+    { key: "essay", label: "Essay" },
+    { key: "story", label: "Short Story" },
     { key: "poem", label: "Poem" },
 ];
 
-const splitTags = (input) => {
-    return String(input || "")
+const categoryLabel = (key) => {
+    const found = CATEGORIES.find((c) => c.key === key);
+    return found ? found.label : key;
+};
+
+const parseTagsText = (text) => {
+    return String(text || "")
         .split(",")
         .map((t) => t.trim())
         .filter(Boolean);
 };
 
-const tagsToString = (tags) => {
+const tagsToText = (tags) => {
     if (!Array.isArray(tags)) return "";
-    return tags.join(", ");
-};
-
-const emptyForm = () => {
-    return {
-        title: "",
-        author: "",
-        tagsText: "",
-        rating: 3,
-        wordCount: "",
-        notes: "",
-    };
-};
-
-const normalizeWordCount = (value) => {
-    const v = String(value || "").trim();
-    if (!v) return null;
-
-    const n = Number.parseInt(v, 10);
-    if (!Number.isFinite(n) || n < 0) return null;
-
-    return n;
-};
-
-const RatingRow = ({ value, onChange, disabled }) => {
-    return (
-        <View style={{ flexDirection: "row", gap: 8 }}>
-            {[1, 2, 3, 4, 5].map((n) => {
-                const selected = value === n;
-                return (
-                    <Pressable
-                        key={n}
-                        onPress={() => onChange(n)}
-                        disabled={disabled}
-                        style={{
-                            paddingVertical: 8,
-                            paddingHorizontal: 12,
-                            borderWidth: 1,
-                            borderColor: "#999",
-                            borderRadius: 8,
-                            opacity: disabled ? 0.6 : 1,
-                            backgroundColor: selected ? "#ddd" : "transparent",
-                        }}
-                    >
-                        <Text style={{ fontWeight: "600" }}>{n}</Text>
-                    </Pressable>
-                );
-            })}
-        </View>
+    const userTags = tags.filter(
+        (t) => !String(t).startsWith("year:") && !String(t).startsWith("type:")
     );
+    return userTags.join(", ");
 };
 
-const TodayScreen = ({ profile }) => {
+const TodayScreen = () => {
     const dayKey = useMemo(() => getTodayDayKeyNY(), []);
 
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
     const [error, setError] = useState("");
 
-    const [itemsByCategory, setItemsByCategory] = useState({
+    const [selectedCategory, setSelectedCategory] = useState("essay");
+    const [isEditing, setIsEditing] = useState(true);
+
+    const [todayEntries, setTodayEntries] = useState({
         essay: null,
         story: null,
         poem: null,
     });
 
-    const [formsByCategory, setFormsByCategory] = useState({
-        essay: emptyForm(),
-        story: emptyForm(),
-        poem: emptyForm(),
-    });
-
-    const [savingByCategory, setSavingByCategory] = useState({
-        essay: false,
-        story: false,
-        poem: false,
-    });
-
-    const [saveErrorByCategory, setSaveErrorByCategory] = useState({
-        essay: "",
-        story: "",
-        poem: "",
-    });
-
-    const completedCount = useMemo(() => {
-        return CATEGORIES.reduce(
-            (acc, c) => acc + (itemsByCategory[c.key] ? 1 : 0),
-            0
-        );
-    }, [itemsByCategory]);
+    const [title, setTitle] = useState("");
+    const [author, setAuthor] = useState("");
+    const [tagsText, setTagsText] = useState("");
+    const [rating, setRating] = useState(5);
+    const [wordCount, setWordCount] = useState("");
+    const [notes, setNotes] = useState("");
 
     const loadToday = async () => {
         setLoading(true);
         setError("");
 
         try {
-            const items = await listEntries({
-                dayKey,
-                profileId: profile?.id,
-            });
+            const items = await listEntries({ dayKey });
+            const next = { essay: null, story: null, poem: null };
 
-            const nextItemsByCategory = { essay: null, story: null, poem: null };
-            for (const item of items) {
-                if (nextItemsByCategory[item.category] == null) {
-                    nextItemsByCategory[item.category] = item;
-                }
+            for (const e of items) {
+                if (e.category === "essay") next.essay = e;
+                if (e.category === "story") next.story = e;
+                if (e.category === "poem") next.poem = e;
             }
 
-            const nextForms = {
-                essay: emptyForm(),
-                story: emptyForm(),
-                poem: emptyForm(),
-            };
-
-            for (const c of CATEGORIES) {
-                const existing = nextItemsByCategory[c.key];
-                if (existing) {
-                    nextForms[c.key] = {
-                        title: existing.title || "",
-                        author: existing.author || "",
-                        tagsText: tagsToString(existing.tags),
-                        rating: Number(existing.rating ?? 3),
-                        wordCount:
-                            existing.wordCount == null ? "" : String(existing.wordCount),
-                        notes: existing.notes || "",
-                    };
-                }
-            }
-
-            setItemsByCategory(nextItemsByCategory);
-            setFormsByCategory(nextForms);
+            setTodayEntries(next);
         } catch (err) {
             console.error(err);
-            setError("Failed to load today's entries.");
+            setError("Failed to load today’s entries.");
         } finally {
             setLoading(false);
         }
     };
 
+    const prefillFromEntry = (entry) => {
+        if (!entry) {
+            setTitle("");
+            setAuthor("");
+            setTagsText("");
+            setRating(5);
+            setWordCount("");
+            setNotes("");
+            return;
+        }
+
+        setTitle(entry.title || "");
+        setAuthor(entry.author || "");
+        setTagsText(tagsToText(entry.tags));
+        setRating(Number(entry.rating || 5));
+        setWordCount(entry.wordCount == null ? "" : String(entry.wordCount));
+        setNotes(entry.notes || "");
+    };
+
     useEffect(() => {
         loadToday();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dayKey, profile?.id]);
+    }, []);
 
-    const updateForm = (category, patch) => {
-        setFormsByCategory((prev) => ({
-            ...prev,
-            [category]: {
-                ...prev[category],
-                ...patch,
-            },
-        }));
-    };
+    useEffect(() => {
+        const existing = todayEntries[selectedCategory] || null;
 
-    const setSaving = (category, isSaving) => {
-        setSavingByCategory((prev) => ({ ...prev, [category]: isSaving }));
-    };
+        // - If entry, show collapsed view.
+        // - If no entry, show entry form.
+        setIsEditing(!existing);
 
-    const setSaveError = (category, message) => {
-        setSaveErrorByCategory((prev) => ({ ...prev, [category]: message }));
-    };
+        prefillFromEntry(existing);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedCategory, todayEntries.essay, todayEntries.story, todayEntries.poem]);
 
-    const handleSave = async (category) => {
-        setSaveError(category, "");
+    const completedCount = useMemo(() => {
+        return ["essay", "story", "poem"].reduce((acc, k) => acc + (todayEntries[k] ? 1 : 0), 0);
+    }, [todayEntries]);
 
-        const form = formsByCategory[category];
+    const isCompleteDay = completedCount === 3;
 
-        if (!form.title.trim()) {
-            setSaveError(category, "Title is required.");
+    const handleSave = async () => {
+        const safeTitle = String(title || "").trim();
+        if (!safeTitle) {
+            Alert.alert("Missing title", "Please enter a title.");
             return;
         }
 
-        if (!Number.isFinite(Number(form.rating)) || form.rating < 1 || form.rating > 5) {
-            setSaveError(category, "Rating must be between 1 and 5.");
-            return;
-        }
-
-        const wordCountNum = normalizeWordCount(form.wordCount);
-
-        const payload = {
-            profileId: profile?.id,
-            dayKey,
-            category,
-            title: form.title.trim(),
-            author: String(form.author || "").trim(),
-            notes: String(form.notes || ""),
-            tags: splitTags(form.tagsText),
-            rating: Number(form.rating),
-            wordCount: wordCountNum === null ? null : wordCountNum,
-        };
-
-        setSaving(category, true);
+        setSaving(true);
 
         try {
-            const saved = await upsertEntryForDayCategory(payload);
+            await upsertEntryForDayCategory({
+                dayKey,
+                category: selectedCategory,
+                title: safeTitle,
+                author,
+                notes,
+                tags: parseTagsText(tagsText),
+                rating,
+                wordCount,
+            });
 
-            setItemsByCategory((prev) => ({ ...prev, [category]: saved }));
+            await loadToday();
 
-            Alert.alert("Saved", `${category.toUpperCase()} entry saved.`);
+            // After saving, collapse.
+            setIsEditing(false);
+
+            Alert.alert("Saved", `${categoryLabel(selectedCategory)} saved for ${dayKey}.`);
         } catch (err) {
             console.error(err);
-            setSaveError(category, "Save failed. Please try again.");
+            Alert.alert("Save failed", "Unable to save this entry.");
         } finally {
-            setSaving(category, false);
+            setSaving(false);
         }
     };
 
-    const handleDelete = async (category) => {
-        const existing = itemsByCategory[category];
-        if (!existing) return;
+    const handleDelete = async () => {
+        const existing = todayEntries[selectedCategory];
+        if (!existing) {
+            Alert.alert("Nothing to delete", "There is no saved entry for this category today.");
+            return;
+        }
 
         Alert.alert(
             "Delete entry?",
-            "This will remove the entry for today in this category.",
+            `Delete today’s ${categoryLabel(selectedCategory)} entry?`,
             [
                 { text: "Cancel", style: "cancel" },
                 {
                     text: "Delete",
                     style: "destructive",
                     onPress: async () => {
-                        setSaveError(category, "");
-                        setSaving(category, true);
-
                         try {
-                            await deleteEntryForDayCategory({
-                                profileId: profile?.id,
-                                dayKey,
-                                category,
-                            });
+                            await deleteEntryForDayCategory({ dayKey, category: selectedCategory });
+                            await loadToday();
 
-                            setItemsByCategory((prev) => ({
-                                ...prev,
-                                [category]: null,
-                            }));
+                            // After deleting, re-open form for this category.
+                            setIsEditing(true);
 
-                            setFormsByCategory((prev) => ({
-                                ...prev,
-                                [category]: emptyForm(),
-                            }));
+                            Alert.alert("Deleted", "Entry deleted.");
                         } catch (err) {
                             console.error(err);
-                            setSaveError(category, "Delete failed. Please try again.");
-                        } finally {
-                            setSaving(category, false);
+                            Alert.alert("Delete failed", "Unable to delete this entry.");
                         }
                     },
                 },
@@ -281,13 +199,27 @@ const TodayScreen = ({ profile }) => {
         );
     };
 
+    const handleEdit = () => {
+        const existing = todayEntries[selectedCategory] || null;
+        prefillFromEntry(existing);
+        setIsEditing(true);
+    };
+
+    const goToNextMissing = () => {
+        const order = ["essay", "story", "poem"];
+        const missing = order.find((k) => !todayEntries[k]);
+        if (missing) setSelectedCategory(missing);
+    };
+
+    const selectedEntry = todayEntries[selectedCategory] || null;
+
     return (
         <SafeAreaView style={{ flex: 1 }}>
             <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
                 <View style={{ gap: 4 }}>
                     <Text style={{ fontSize: 22, fontWeight: "600" }}>Today</Text>
                     <Text style={{ opacity: 0.7 }}>
-                        {profile?.displayName} — {dayKey}
+                        {dayKey} • Daily credit: {completedCount}/3 {isCompleteDay ? "(complete)" : ""}
                     </Text>
                 </View>
 
@@ -297,27 +229,50 @@ const TodayScreen = ({ profile }) => {
                         borderColor: "#999",
                         borderRadius: 10,
                         padding: 12,
-                        gap: 8,
+                        gap: 10,
                     }}
                 >
-                    <Text style={{ fontSize: 18, fontWeight: "600" }}>
-                        Completed: {completedCount}/3
-                    </Text>
+                    <Text style={{ fontWeight: "700" }}>Category</Text>
+
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                        {CATEGORIES.map((c) => {
+                            const selected = selectedCategory === c.key;
+                            const done = Boolean(todayEntries[c.key]);
+
+                            return (
+                                <Pressable
+                                    key={c.key}
+                                    onPress={() => setSelectedCategory(c.key)}
+                                    style={{
+                                        paddingVertical: 8,
+                                        paddingHorizontal: 12,
+                                        borderWidth: 1,
+                                        borderColor: "#999",
+                                        borderRadius: 999,
+                                        backgroundColor: selected ? "#ddd" : "transparent",
+                                    }}
+                                >
+                                    <Text style={{ fontWeight: "700" }}>
+                                        {c.label}
+                                        {done ? " ✓" : ""}
+                                    </Text>
+                                </Pressable>
+                            );
+                        })}
+                    </View>
 
                     <Pressable
-                        onPress={loadToday}
+                        onPress={goToNextMissing}
                         style={{
-                            paddingVertical: 10,
+                            alignSelf: "flex-start",
+                            paddingVertical: 8,
                             paddingHorizontal: 12,
                             borderWidth: 1,
                             borderColor: "#999",
                             borderRadius: 8,
-                            alignSelf: "flex-start",
                         }}
                     >
-                        <Text style={{ fontWeight: "600" }}>
-                            {loading ? "Loading…" : "Refresh"}
-                        </Text>
+                        <Text style={{ fontWeight: "700" }}>Jump to next missing</Text>
                     </Pressable>
                 </View>
 
@@ -336,39 +291,91 @@ const TodayScreen = ({ profile }) => {
                     </View>
                 ) : null}
 
-                {CATEGORIES.map((c) => {
-                    const existing = itemsByCategory[c.key];
-                    const form = formsByCategory[c.key];
-                    const saving = savingByCategory[c.key];
-                    const saveErr = saveErrorByCategory[c.key];
+                <View
+                    style={{
+                        borderWidth: 1,
+                        borderColor: "#999",
+                        borderRadius: 10,
+                        padding: 12,
+                        gap: 10,
+                    }}
+                >
+                    <Text style={{ fontWeight: "700" }}>
+                        {selectedEntry ? "Logged" : "Log"}: {categoryLabel(selectedCategory)}
+                    </Text>
 
-                    return (
-                        <View
-                            key={c.key}
-                            style={{
-                                borderWidth: 1,
-                                borderColor: "#999",
-                                borderRadius: 10,
-                                padding: 12,
-                                gap: 10,
-                            }}
-                        >
-                            <View style={{ gap: 2 }}>
-                                <Text style={{ fontSize: 16, fontWeight: "700" }}>
-                                    {c.label}
+                    {/* COLLAPSED VIEW (saved entry) */}
+                    {selectedEntry && !isEditing ? (
+                        <View style={{ gap: 10 }}>
+                            <View style={{ gap: 4 }}>
+                                <Text style={{ fontSize: 16, fontWeight: "800" }}>
+                                    {selectedEntry.title}
                                 </Text>
+
+                                {selectedEntry.author ? (
+                                    <Text style={{ opacity: 0.8 }}>{selectedEntry.author}</Text>
+                                ) : null}
+
                                 <Text style={{ opacity: 0.7 }}>
-                                    {existing ? "Saved" : "Not logged yet"}
+                                    Rating: {selectedEntry.rating}
+                                    {selectedEntry.wordCount != null
+                                        ? ` • Words: ${selectedEntry.wordCount}`
+                                        : ""}
                                 </Text>
+
+                                {Array.isArray(selectedEntry.tags) && selectedEntry.tags.length ? (
+                                    <Text style={{ opacity: 0.7 }}>
+                                        Tags:{" "}
+                                        {selectedEntry.tags
+                                            .filter(
+                                                (t) =>
+                                                    !String(t).startsWith("year:") &&
+                                                    !String(t).startsWith("type:")
+                                            )
+                                            .join(", ") || "—"}
+                                    </Text>
+                                ) : null}
                             </View>
 
+                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+                                <Pressable
+                                    onPress={handleEdit}
+                                    style={{
+                                        paddingVertical: 10,
+                                        paddingHorizontal: 12,
+                                        borderWidth: 1,
+                                        borderColor: "#999",
+                                        borderRadius: 8,
+                                    }}
+                                >
+                                    <Text style={{ fontWeight: "800" }}>Edit</Text>
+                                </Pressable>
+
+                                <Pressable
+                                    onPress={handleDelete}
+                                    style={{
+                                        paddingVertical: 10,
+                                        paddingHorizontal: 12,
+                                        borderWidth: 1,
+                                        borderColor: "#999",
+                                        borderRadius: 8,
+                                    }}
+                                >
+                                    <Text style={{ fontWeight: "800" }}>Delete</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+                    ) : null}
+
+                    {/* EDIT FORM (new or editing) */}
+                    {(!selectedEntry || isEditing) ? (
+                        <View style={{ gap: 10 }}>
                             <View style={{ gap: 6 }}>
-                                <Text style={{ fontWeight: "600" }}>Title</Text>
+                                <Text style={{ fontWeight: "600" }}>Title *</Text>
                                 <TextInput
-                                    value={form.title}
-                                    onChangeText={(v) => updateForm(c.key, { title: v })}
-                                    editable={!saving}
-                                    placeholder="Title"
+                                    value={title}
+                                    onChangeText={setTitle}
+                                    placeholder="e.g., The Veldt"
                                     style={{
                                         borderWidth: 1,
                                         borderColor: "#999",
@@ -379,12 +386,11 @@ const TodayScreen = ({ profile }) => {
                             </View>
 
                             <View style={{ gap: 6 }}>
-                                <Text style={{ fontWeight: "600" }}>Author (optional)</Text>
+                                <Text style={{ fontWeight: "600" }}>Author</Text>
                                 <TextInput
-                                    value={form.author}
-                                    onChangeText={(v) => updateForm(c.key, { author: v })}
-                                    editable={!saving}
-                                    placeholder="Author"
+                                    value={author}
+                                    onChangeText={setAuthor}
+                                    placeholder="optional"
                                     style={{
                                         borderWidth: 1,
                                         borderColor: "#999",
@@ -395,14 +401,16 @@ const TodayScreen = ({ profile }) => {
                             </View>
 
                             <View style={{ gap: 6 }}>
-                                <Text style={{ fontWeight: "600" }}>
-                                    Tags (comma-separated)
+                                <Text style={{ fontWeight: "600" }}>Tags</Text>
+                                <Text style={{ opacity: 0.7 }}>
+                                    Comma-separated. Year/type tags are auto-added.
                                 </Text>
                                 <TextInput
-                                    value={form.tagsText}
-                                    onChangeText={(v) => updateForm(c.key, { tagsText: v })}
-                                    editable={!saving}
-                                    placeholder="genre, topic, theme"
+                                    value={tagsText}
+                                    onChangeText={setTagsText}
+                                    placeholder="e.g., sci-fi, dystopia"
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
                                     style={{
                                         borderWidth: 1,
                                         borderColor: "#999",
@@ -414,28 +422,42 @@ const TodayScreen = ({ profile }) => {
 
                             <View style={{ gap: 6 }}>
                                 <Text style={{ fontWeight: "600" }}>Rating</Text>
-                                <RatingRow
-                                    value={form.rating}
-                                    onChange={(n) => updateForm(c.key, { rating: n })}
-                                    disabled={saving}
-                                />
+                                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                                    {[1, 2, 3, 4, 5].map((n) => {
+                                        const selected = rating === n;
+                                        return (
+                                            <Pressable
+                                                key={n}
+                                                onPress={() => setRating(n)}
+                                                style={{
+                                                    paddingVertical: 8,
+                                                    paddingHorizontal: 12,
+                                                    borderWidth: 1,
+                                                    borderColor: "#999",
+                                                    borderRadius: 999,
+                                                    backgroundColor: selected ? "#ddd" : "transparent",
+                                                }}
+                                            >
+                                                <Text style={{ fontWeight: "700" }}>{n}</Text>
+                                            </Pressable>
+                                        );
+                                    })}
+                                </View>
                             </View>
 
                             <View style={{ gap: 6 }}>
-                                <Text style={{ fontWeight: "600" }}>
-                                    Estimated word count (optional)
-                                </Text>
+                                <Text style={{ fontWeight: "600" }}>Estimated word count</Text>
                                 <TextInput
-                                    value={form.wordCount}
-                                    onChangeText={(v) => updateForm(c.key, { wordCount: v })}
-                                    editable={!saving}
-                                    placeholder="e.g., 2500"
+                                    value={wordCount}
+                                    onChangeText={setWordCount}
+                                    placeholder="optional"
                                     keyboardType="number-pad"
                                     style={{
                                         borderWidth: 1,
                                         borderColor: "#999",
                                         borderRadius: 8,
                                         padding: 10,
+                                        maxWidth: 180,
                                     }}
                                 />
                             </View>
@@ -443,10 +465,9 @@ const TodayScreen = ({ profile }) => {
                             <View style={{ gap: 6 }}>
                                 <Text style={{ fontWeight: "600" }}>Notes</Text>
                                 <TextInput
-                                    value={form.notes}
-                                    onChangeText={(v) => updateForm(c.key, { notes: v })}
-                                    editable={!saving}
-                                    placeholder="Thoughts, quotes, takeaways…"
+                                    value={notes}
+                                    onChangeText={setNotes}
+                                    placeholder="optional"
                                     multiline
                                     style={{
                                         borderWidth: 1,
@@ -459,22 +480,9 @@ const TodayScreen = ({ profile }) => {
                                 />
                             </View>
 
-                            {saveErr ? (
-                                <View
-                                    style={{
-                                        borderWidth: 1,
-                                        borderColor: "#999",
-                                        borderRadius: 10,
-                                        padding: 10,
-                                    }}
-                                >
-                                    <Text>{saveErr}</Text>
-                                </View>
-                            ) : null}
-
-                            <View style={{ flexDirection: "row", gap: 10 }}>
+                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
                                 <Pressable
-                                    onPress={() => handleSave(c.key)}
+                                    onPress={handleSave}
                                     disabled={saving}
                                     style={{
                                         paddingVertical: 10,
@@ -485,31 +493,72 @@ const TodayScreen = ({ profile }) => {
                                         opacity: saving ? 0.6 : 1,
                                     }}
                                 >
-                                    <Text style={{ fontWeight: "600" }}>
-                                        {saving ? "Saving…" : existing ? "Update" : "Save"}
+                                    <Text style={{ fontWeight: "800" }}>
+                                        {saving ? "Saving..." : "Save"}
                                     </Text>
                                 </Pressable>
 
-                                {existing ? (
+                                {selectedEntry ? (
                                     <Pressable
-                                        onPress={() => handleDelete(c.key)}
-                                        disabled={saving}
+                                        onPress={() => setIsEditing(false)}
                                         style={{
                                             paddingVertical: 10,
                                             paddingHorizontal: 12,
                                             borderWidth: 1,
                                             borderColor: "#999",
                                             borderRadius: 8,
-                                            opacity: saving ? 0.6 : 1,
                                         }}
                                     >
-                                        <Text style={{ fontWeight: "600" }}>Delete</Text>
+                                        <Text style={{ fontWeight: "800" }}>Cancel</Text>
                                     </Pressable>
                                 ) : null}
+
+                                <Pressable
+                                    onPress={handleDelete}
+                                    style={{
+                                        paddingVertical: 10,
+                                        paddingHorizontal: 12,
+                                        borderWidth: 1,
+                                        borderColor: "#999",
+                                        borderRadius: 8,
+                                    }}
+                                >
+                                    <Text style={{ fontWeight: "800" }}>Delete</Text>
+                                </Pressable>
                             </View>
                         </View>
-                    );
-                })}
+                    ) : null}
+                </View>
+
+                <View
+                    style={{
+                        borderWidth: 1,
+                        borderColor: "#999",
+                        borderRadius: 10,
+                        padding: 12,
+                        gap: 8,
+                    }}
+                >
+                    <Text style={{ fontWeight: "700" }}>Today’s saved entries</Text>
+
+                    {["essay", "story", "poem"].map((k) => {
+                        const e = todayEntries[k];
+                        return (
+                            <View key={k} style={{ gap: 2 }}>
+                                <Text style={{ fontWeight: "800" }}>
+                                    {categoryLabel(k)}: {e ? "Saved" : "Missing"}
+                                </Text>
+                                {e ? (
+                                    <Text style={{ opacity: 0.7 }}>
+                                        {e.title}
+                                        {e.wordCount != null ? ` • ${e.wordCount} words` : ""}
+                                        {e.rating ? ` • ${e.rating}/5` : ""}
+                                    </Text>
+                                ) : null}
+                            </View>
+                        );
+                    })}
+                </View>
             </ScrollView>
         </SafeAreaView>
     );
