@@ -13,6 +13,8 @@ const DEFAULT_PROFILES = [
 
 const CATEGORY_ORDER = ["essay", "story", "poem"];
 
+const CONTENT_TYPES = ["essay", "short_story", "poem", "book"];
+
 const nowIso = () => new Date().toISOString();
 
 const makeId = () => {
@@ -68,6 +70,32 @@ const getTodayDayKeyNY = () => {
         month: "2-digit",
         day: "2-digit",
     }).format(new Date());
+};
+
+const getYearFromDayKey = (dayKey) => {
+    const s = String(dayKey || "");
+    if (s.length >= 4) return s.slice(0, 4);
+    return String(new Date().getFullYear());
+};
+
+const contentTypeFromCategory = (category) => {
+    if (category === "story") return "short_story";
+    if (category === "essay") return "essay";
+    if (category === "poem") return "poem";
+    // For future use
+    if (category === "book") return "book";
+    return "essay";
+};
+
+const ensureSystemTags = ({ tags, dayKey, category }) => {
+    const year = getYearFromDayKey(dayKey);
+    const type = contentTypeFromCategory(category);
+
+    const base = normalizeTags(tags);
+
+    const system = [`year:${year}`, `type:${type}`];
+
+    return normalizeTags([...base, ...system]);
 };
 
 const ensureInitialized = async () => {
@@ -161,7 +189,6 @@ const listEntries = async (params = {}) => {
             return true;
         })
         .sort((a, b) => {
-            // dayKey desc, then category order
             if (a.dayKey !== b.dayKey) return a.dayKey < b.dayKey ? 1 : -1;
 
             const ai = CATEGORY_ORDER.indexOf(a.category);
@@ -208,6 +235,12 @@ const upsertEntryForDayCategory = async (payload) => {
         (e) => e.profileId === pId && e.dayKey === dayKey && e.category === category
     );
 
+    const safeTags = ensureSystemTags({
+        tags: payload.tags || [],
+        dayKey,
+        category,
+    });
+
     const base = {
         profileId: pId,
         dayKey,
@@ -215,7 +248,7 @@ const upsertEntryForDayCategory = async (payload) => {
         title,
         author: String(payload.author || "").trim(),
         notes: String(payload.notes || ""),
-        tags: normalizeTags(payload.tags || []),
+        tags: safeTags,
         rating,
         wordCount: safeWordCount,
     };
@@ -267,51 +300,54 @@ const deleteEntryForDayCategory = async ({ dayKey, category, profileId }) => {
 
 const computeBadges = (streakDays) => {
     const thresholds = [
-        { n: 3, key: "streak_3", label: "3-day streak", description: "Three complete days in a row." },
+        { n: 3, key: "streak_3", label: "3-day streak", description: "3 complete days in a row." },
         { n: 7, key: "streak_7", label: "7-day streak", description: "A full week of complete days." },
         { n: 14, key: "streak_14", label: "14-day streak", description: "Two weeks strong." },
         { n: 30, key: "streak_30", label: "30-day streak", description: "A month of consistency." },
         { n: 60, key: "streak_60", label: "60-day streak", description: "Two months." },
-        { n: 100, key: "streak_100", label: "100-day streak", description: "Triple digits!" },
+        { n: 100, key: "streak_100", label: "100-day streak", description: "Triple digits." },
     ];
 
     return thresholds.filter((t) => streakDays >= t.n);
 };
 
-const getStatsSummary = async ({ from, to, profileId } = {}) => {
-    await ensureInitialized();
-
-    const pId = profileId || (await getCurrentProfileId());
-    if (!pId) throw new Error("missing_profile");
-
-    const entries = await listEntries({ profileId: pId, from, to });
-
+const computeStatsForEntries = (entries) => {
     const totals = {
-        entriesCount: entries.length,
+        entriesCount: 0,
         totalWords: 0,
         averageRating: null,
     };
 
-    const byCategory = {
+    const byType = {
         essay: { entriesCount: 0, totalWords: 0, avgRating: null },
-        story: { entriesCount: 0, totalWords: 0, avgRating: null },
+        short_story: { entriesCount: 0, totalWords: 0, avgRating: null },
         poem: { entriesCount: 0, totalWords: 0, avgRating: null },
+        book: { entriesCount: 0, totalWords: 0, avgRating: null },
     };
 
     let ratingSum = 0;
 
-    const catRatingSum = { essay: 0, story: 0, poem: 0 };
+    const typeRatingSum = {
+        essay: 0,
+        short_story: 0,
+        poem: 0,
+        book: 0,
+    };
 
     for (const e of entries) {
+        totals.entriesCount += 1;
+
         const wc = e.wordCount != null ? Number(e.wordCount) : 0;
         totals.totalWords += wc;
 
-        ratingSum += Number(e.rating || 0);
+        const r = Number(e.rating || 0);
+        ratingSum += r;
 
-        if (byCategory[e.category]) {
-            byCategory[e.category].entriesCount += 1;
-            byCategory[e.category].totalWords += wc;
-            catRatingSum[e.category] += Number(e.rating || 0);
+        const t = contentTypeFromCategory(e.category);
+        if (byType[t]) {
+            byType[t].entriesCount += 1;
+            byType[t].totalWords += wc;
+            typeRatingSum[t] += r;
         }
     }
 
@@ -319,15 +355,40 @@ const getStatsSummary = async ({ from, to, profileId } = {}) => {
         totals.averageRating = ratingSum / totals.entriesCount;
     }
 
-    for (const cat of ["essay", "story", "poem"]) {
-        const count = byCategory[cat].entriesCount;
+    for (const t of CONTENT_TYPES) {
+        const count = byType[t].entriesCount;
         if (count > 0) {
-            byCategory[cat].avgRating = catRatingSum[cat] / count;
+            byType[t].avgRating = typeRatingSum[t] / count;
         }
     }
 
+    return { totals, byType };
+};
+
+const getStatsSummary = async ({ profileId } = {}) => {
+    await ensureInitialized();
+
+    const pId = profileId || (await getCurrentProfileId());
+    if (!pId) throw new Error("missing_profile");
+
     const allEntries = await listEntries({ profileId: pId });
 
+    const yearsSet = new Set();
+    for (const e of allEntries) {
+        yearsSet.add(getYearFromDayKey(e.dayKey));
+    }
+
+    const availableYears = Array.from(yearsSet).sort((a, b) => (a < b ? 1 : -1));
+
+    const globalStats = computeStatsForEntries(allEntries);
+
+    const byYear = {};
+    for (const y of availableYears) {
+        const yearEntries = allEntries.filter((e) => getYearFromDayKey(e.dayKey) === y);
+        byYear[y] = computeStatsForEntries(yearEntries);
+    }
+
+    // Streak: consecutive complete days up to today
     const dayToCats = new Map();
     for (const e of allEntries) {
         if (!dayToCats.has(e.dayKey)) dayToCats.set(e.dayKey, new Set());
@@ -351,20 +412,14 @@ const getStatsSummary = async ({ from, to, profileId } = {}) => {
 
     return {
         ok: true,
-        totals,
-        byCategory,
+        availableYears,
+        global: globalStats,
+        byYear,
         streak: {
             currentStreakDays: streak,
         },
         badges,
     };
-};
-
-const resetAllLocalData = async () => {
-    await AsyncStorage.removeItem(KEYS.ENTRIES);
-    await AsyncStorage.removeItem(KEYS.CURRENT_PROFILE_ID);
-    await AsyncStorage.removeItem(KEYS.PROFILES);
-    await ensureInitialized();
 };
 
 const exportAllLocalData = async () => {
@@ -388,6 +443,13 @@ const exportAllLocalData = async () => {
     return payload;
 };
 
+const resetAllLocalData = async () => {
+    await AsyncStorage.removeItem(KEYS.ENTRIES);
+    await AsyncStorage.removeItem(KEYS.CURRENT_PROFILE_ID);
+    await AsyncStorage.removeItem(KEYS.PROFILES);
+    await ensureInitialized();
+};
+
 export {
     getTodayDayKeyNY,
     getProfiles,
@@ -399,6 +461,6 @@ export {
     deleteEntryById,
     deleteEntryForDayCategory,
     getStatsSummary,
-    resetAllLocalData,
     exportAllLocalData,
+    resetAllLocalData,
 };

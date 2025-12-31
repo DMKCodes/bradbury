@@ -26,11 +26,35 @@ const clampRating = (value) => {
     return String(n);
 };
 
+const deriveYearsFromEntries = (entries) => {
+    const yearsSet = new Set();
+
+    for (const e of entries) {
+        const dk = String(e.dayKey || "");
+        if (dk.length >= 4) {
+            yearsSet.add(dk.slice(0, 4));
+        }
+    }
+
+    return Array.from(yearsSet).sort((a, b) => (a < b ? 1 : -1));
+};
+
+const yearToRange = (year) => {
+    if (!year) return {};
+    return {
+        from: `${year}-01-01`,
+        to: `${year}-12-31`,
+    };
+};
+
 const HistoryScreen = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [items, setItems] = useState([]);
 
+    const [availableYears, setAvailableYears] = useState([]);
+
+    const [year, setYear] = useState(""); // "" = All
     const [category, setCategory] = useState("");
     const [tag, setTag] = useState("");
     const [search, setSearch] = useState("");
@@ -38,14 +62,40 @@ const HistoryScreen = () => {
 
     const queryParams = useMemo(() => {
         const params = {};
+
         if (category) params.category = category;
         if (tag.trim()) params.tag = tag.trim();
         if (search.trim()) params.search = search.trim();
         if (minRating) params.minRating = minRating;
-        return params;
-    }, [category, tag, search, minRating]);
 
-    const load = async (params) => {
+        if (year) {
+            const { from, to } = yearToRange(year);
+            params.from = from;
+            params.to = to;
+        }
+
+        return params;
+    }, [category, tag, search, minRating, year]);
+
+    const loadAllAndSetYears = async () => {
+        setLoading(true);
+        setError("");
+
+        try {
+            const all = await listEntries({});
+            setItems(all);
+            setAvailableYears(deriveYearsFromEntries(all));
+        } catch (err) {
+            console.error(err);
+            setError("Failed to load entries.");
+            setItems([]);
+            setAvailableYears([]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const loadFiltered = async (params) => {
         setLoading(true);
         setError("");
 
@@ -62,19 +112,20 @@ const HistoryScreen = () => {
     };
 
     useEffect(() => {
-        load({});
+        loadAllAndSetYears();
     }, []);
 
     const applyFilters = () => {
-        load(queryParams);
+        loadFiltered(queryParams);
     };
 
     const clearFilters = () => {
+        setYear("");
         setCategory("");
         setTag("");
         setSearch("");
         setMinRating("");
-        load({});
+        loadAllAndSetYears();
     };
 
     const categoryLabel = (key) => {
@@ -102,6 +153,48 @@ const HistoryScreen = () => {
                     }}
                 >
                     <Text style={{ fontWeight: "700" }}>Filters</Text>
+
+                    <View style={{ gap: 6 }}>
+                        <Text style={{ fontWeight: "600" }}>Year</Text>
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                            <Pressable
+                                onPress={() => setYear("")}
+                                style={{
+                                    paddingVertical: 8,
+                                    paddingHorizontal: 12,
+                                    borderWidth: 1,
+                                    borderColor: "#999",
+                                    borderRadius: 999,
+                                    backgroundColor: year === "" ? "#ddd" : "transparent",
+                                }}
+                            >
+                                <Text style={{ fontWeight: "600" }}>All</Text>
+                            </Pressable>
+
+                            {availableYears.map((y) => (
+                                <Pressable
+                                    key={y}
+                                    onPress={() => setYear(y)}
+                                    style={{
+                                        paddingVertical: 8,
+                                        paddingHorizontal: 12,
+                                        borderWidth: 1,
+                                        borderColor: "#999",
+                                        borderRadius: 999,
+                                        backgroundColor: year === y ? "#ddd" : "transparent",
+                                    }}
+                                >
+                                    <Text style={{ fontWeight: "600" }}>{y}</Text>
+                                </Pressable>
+                            ))}
+                        </View>
+
+                        {!availableYears.length ? (
+                            <Text style={{ opacity: 0.7 }}>
+                                No year data yet. Add a reading entry first.
+                            </Text>
+                        ) : null}
+                    </View>
 
                     <View style={{ gap: 6 }}>
                         <Text style={{ fontWeight: "600" }}>Category</Text>

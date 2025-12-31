@@ -1,10 +1,6 @@
 {
   "name": "bradbury-2026",
   "private": true,
-  "workspaces": [
-      "apps/api",
-      "apps/mobile"
-  ],
   "scripts": {
     "dev": "npm -w apps/api run dev",
     "dev:mobile": "npm -w apps/mobile run start"
