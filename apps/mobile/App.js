@@ -11,7 +11,7 @@ import CurriculumTopicScreen from "./src/screens/CurriculumTopicScreen";
 
 import HistoryScreen from "./src/screens/HistoryScreen";
 import StatsScreen from "./src/screens/StatsScreen";
-
+import BooksScreen from "./src/screens/BooksScreen";
 import InsightsScreen from "./src/screens/InsightsScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 
@@ -113,6 +113,12 @@ const App = () => {
                     name="CurriculumTopic"
                     component={CurriculumTopicScreen}
                     options={{ title: "Topic" }}
+                />
+
+                <Stack.Screen
+                    name="Books"
+                    component={BooksScreen}
+                    options={{ title: "Books" }}
                 />
             </Stack.Navigator>
         </NavigationContainer>

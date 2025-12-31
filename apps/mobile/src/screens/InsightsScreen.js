@@ -6,22 +6,13 @@ import { useNavigation } from "@react-navigation/native";
 const InsightsScreen = () => {
     const navigation = useNavigation();
 
-    const openHistory = () => {
+    const openRoute = (name) => {
         const parent = navigation.getParent?.();
         if (parent) {
-            parent.navigate("History");
+            parent.navigate(name);
             return;
         }
-        navigation.navigate("History");
-    };
-
-    const openStats = () => {
-        const parent = navigation.getParent?.();
-        if (parent) {
-            parent.navigate("Stats");
-            return;
-        }
-        navigation.navigate("Stats");
+        navigation.navigate(name);
     };
 
     return (
@@ -30,7 +21,7 @@ const InsightsScreen = () => {
                 <View style={{ gap: 4 }}>
                     <Text style={{ fontSize: 22, fontWeight: "600" }}>Insights</Text>
                     <Text style={{ opacity: 0.7 }}>
-                        History and Stats are now grouped here to keep the tab bar clean.
+                        History and Stats are grouped here to keep the tab bar clean.
                     </Text>
                 </View>
 
@@ -46,7 +37,7 @@ const InsightsScreen = () => {
                     <Text style={{ fontWeight: "800" }}>Quick links</Text>
 
                     <Pressable
-                        onPress={openHistory}
+                        onPress={() => openRoute("History")}
                         style={{
                             paddingVertical: 12,
                             paddingHorizontal: 12,
@@ -62,7 +53,7 @@ const InsightsScreen = () => {
                     </Pressable>
 
                     <Pressable
-                        onPress={openStats}
+                        onPress={() => openRoute("Stats")}
                         style={{
                             paddingVertical: 12,
                             paddingHorizontal: 12,
@@ -74,6 +65,22 @@ const InsightsScreen = () => {
                         <Text style={{ fontWeight: "800" }}>Stats</Text>
                         <Text style={{ opacity: 0.7 }}>
                             Streaks, totals, averages, and counts by category/year.
+                        </Text>
+                    </Pressable>
+
+                    <Pressable
+                        onPress={() => openRoute("Books")}
+                        style={{
+                            paddingVertical: 12,
+                            paddingHorizontal: 12,
+                            borderWidth: 1,
+                            borderColor: "#999",
+                            borderRadius: 10,
+                        }}
+                    >
+                        <Text style={{ fontWeight: "800" }}>Books</Text>
+                        <Text style={{ opacity: 0.7 }}>
+                            Track books completed (separate from daily Bradbury credit).
                         </Text>
                     </Pressable>
                 </View>
