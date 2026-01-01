@@ -46,7 +46,7 @@ const HistoryScreen = () => {
 
     const [entries, setEntries] = useState([]);
 
-    const [editing, setEditing] = useState(null); // { dayKey, category }
+    const [editing, setEditing] = useState(null);
     const [editTitle, setEditTitle] = useState("");
     const [editAuthor, setEditAuthor] = useState("");
     const [editTagsText, setEditTagsText] = useState("");
@@ -181,7 +181,7 @@ const HistoryScreen = () => {
                 <View style={{ gap: 4 }}>
                     <Text style={GlobalStyles.title}>History</Text>
                     <Text style={GlobalStyles.subtitle}>
-                        Browse and edit your essay/story/poem logs across years.
+                        Browse and edit your reading logs.
                     </Text>
                 </View>
 

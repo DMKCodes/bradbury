@@ -64,7 +64,7 @@ const ReadingScreen = () => {
                 <View style={{ gap: 4 }}>
                     <Text style={GlobalStyles.title}>Reading</Text>
                     <Text style={GlobalStyles.subtitle}>
-                        Paste text to calculate word count. Nothing here is saved.
+                        Paste text to calculate word count for logging. Nothing pasted here is saved.
                     </Text>
                 </View>
 
@@ -74,7 +74,7 @@ const ReadingScreen = () => {
                     <TextInput
                         value={text}
                         onChangeText={setText}
-                        placeholder="Paste article/story/essay/poem text here (temporary)…"
+                        placeholder="Paste text here to calculate word count."
                         placeholderTextColor={Colors.mutedText}
                         multiline
                         autoCapitalize="none"
@@ -88,7 +88,7 @@ const ReadingScreen = () => {
                             {wordCount.toLocaleString()}
                         </Text>
                         <Text style={GlobalStyles.muted}>
-                            Tap “Finished?” to select what you’re logging.
+                            Tap Finished to log these words.
                         </Text>
                     </View>
 

@@ -78,7 +78,7 @@ const SettingsScreen = () => {
                 <View style={{ gap: 4 }}>
                     <Text style={GlobalStyles.title}>Settings</Text>
                     <Text style={GlobalStyles.subtitle}>
-                        Export and app maintenance actions.
+                        Export and maintenance actions.
                     </Text>
                 </View>
 
@@ -90,7 +90,7 @@ const SettingsScreen = () => {
                             {busy ? "Working..." : "Copy Export JSON to Clipboard"}
                         </Text>
                         <Text style={GlobalStyles.muted}>
-                            Exports all local keys beginning with ${BRADBURY_PREFIX}.
+                            Exports all local keys to clipboard in JSON format.
                         </Text>
                     </Pressable>
 
@@ -99,7 +99,7 @@ const SettingsScreen = () => {
                             {busy ? "Working..." : "Clear Local Data"}
                         </Text>
                         <Text style={GlobalStyles.muted}>
-                            Deletes all local Bradbury app data from this device.
+                            Deletes all local data from this device.
                         </Text>
                     </Pressable>
                 </View>

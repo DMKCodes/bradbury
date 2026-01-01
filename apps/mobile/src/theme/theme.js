@@ -1,22 +1,17 @@
 import { StyleSheet } from "react-native";
 
 const Colors = {
-    // Dark warm base
-    bg: "#1B1A17",          // warm charcoal
-    surface: "#24221D",     // slightly lighter surface
-    surface2: "#2B2822",    // alternate surface
-    border: "#3A362E",      // muted warm border
+    bg: "#242423",          // warm charcoal
+    surface: "#333533",     // slightly lighter surface
+    surface2: "#1b1b1d",    // alternate surface
+    border: "#cfdbd5",      // muted warm border
+    text: "#F5F2EA",
+    mutedText: "#B9B1A4",
+    accent: "#e6af2e",
+    accent2: "#14B8A6",
+    success: "#22C55E",
+    danger: "#EF4444",
 
-    text: "#F5F2EA",        // warm off-white
-    mutedText: "#B9B1A4",   // muted beige-gray
-
-    // Accents
-    accent: "#D97706",      // amber (eye-draw)
-    accent2: "#14B8A6",     // teal (secondary)
-    success: "#22C55E",     // green
-    danger: "#EF4444",      // red
-
-    // Utility
     overlay: "rgba(0, 0, 0, 0.45)",
     successTint: "rgba(34, 197, 94, 0.14)",
     dangerTint: "rgba(239, 68, 68, 0.14)",

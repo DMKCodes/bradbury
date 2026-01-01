@@ -72,7 +72,7 @@ const CurriculumScreen = ({ navigation }) => {
                 <View style={{ gap: 4 }}>
                     <Text style={GlobalStyles.title}>Curriculum</Text>
                     <Text style={GlobalStyles.subtitle}>
-                        Maintain topics and reading lists (to-do style).
+                        Maintain your topics and store reading lists for easy access.
                     </Text>
                 </View>
 

@@ -278,7 +278,7 @@ const StatsScreen = () => {
                 <View style={{ gap: 4 }}>
                     <Text style={GlobalStyles.title}>Stats</Text>
                     <Text style={GlobalStyles.subtitle}>
-                        Includes books in totals; streak remains Bradbury-only.
+                        Review your reading stats by year or all-time. 
                     </Text>
                 </View>
 
@@ -330,7 +330,7 @@ const StatsScreen = () => {
                     </Text>
 
                     <Text style={GlobalStyles.muted}>
-                        Completed days (essay+story+poem):{" "}
+                        Total days:{" "}
                         <Text style={{ fontWeight: "800", color: Colors.text }}>
                             {challengeStreakStats.completeDayCount}
                         </Text>
@@ -351,7 +351,7 @@ const StatsScreen = () => {
                 </View>
 
                 <View style={GlobalStyles.card}>
-                    <Text style={GlobalStyles.label}>Totals (including books)</Text>
+                    <Text style={GlobalStyles.label}>Totals (including books for now)</Text>
 
                     <Text style={GlobalStyles.muted}>
                         Total estimated words:{" "}
@@ -370,7 +370,7 @@ const StatsScreen = () => {
                 </View>
 
                 <View style={GlobalStyles.card}>
-                    <Text style={GlobalStyles.label}>Per-type averages</Text>
+                    <Text style={GlobalStyles.label}>Category averages</Text>
 
                     {Object.keys(TYPE_LABELS).map((k) => {
                         const a = perTypeAverages[k];
