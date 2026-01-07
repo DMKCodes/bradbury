@@ -8,7 +8,7 @@ import { FontAwesome } from "@expo/vector-icons";
 import { Colors } from "./src/theme/theme";
 
 import LogScreen from "./src/screens/LogScreen";
-import ReadingScreen from "./src/screens/ReadingScreen";
+import WordCountScreen from "./src/screens/WordCountScreen";
 import CurriculumScreen from "./src/screens/CurriculumScreen";
 import CurriculumTopicScreen from "./src/screens/CurriculumTopicScreen";
 import HistoryScreen from "./src/screens/HistoryScreen";
@@ -61,7 +61,7 @@ const getTabIconName = (routeName) => {
     switch (routeName) {
         case "Log":
             return "pencil";
-        case "Reading":
+        case "WordCount":
             return "file-text";
         case "Insights":
             return "bar-chart";
@@ -102,10 +102,10 @@ const MainTabs = () => {
             />
 
             <Tabs.Screen
-                name="Reading"
-                component={ReadingScreen}
+                name="WordCount"
+                component={WordCountScreen}
                 options={({ navigation }) => ({
-                    title: "Reading",
+                    title: "Word Count",
                     headerRight: () => headerRightSettingsButton(navigation),
                 })}
             />

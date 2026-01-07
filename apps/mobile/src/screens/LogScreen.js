@@ -1,253 +1,230 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    ScrollView,
-    Text,
-    TextInput,
-    View,
-} from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { Alert, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect, useRoute } from "@react-navigation/native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
 
-import {
-    deleteEntryForDayCategory,
-    getTodayDayKeyNY,
-    listEntries,
-    upsertEntryForDayCategory,
-} from "../lib/store";
+import { deleteEntryForDayCategory, getTodayDayKeyNY, listEntries, upsertEntryForDayCategory } from "../lib/store";
+import { addDays, clampToToday, dayKeyToPretty, monthKeyFromDayKey } from "../lib/dateUtils";
+import { useDaySwipe } from "../hooks/useDaySwipe";
+
+import CalendarModal from "../components/log/CalendarModal";
+import DayNavRow from "../components/log/DayNavRow";
+import LogActionCard from "../components/log/LogActionCard";
+import LoggedReadingsRow from "../components/log/LoggedReadingsRow";
+import LogHeaderCard from "../components/log/LogHeaderCard";
+import LogReadingForm from "../components/log/LogReadingForm";
 
 import { Colors, GlobalStyles } from "../theme/theme";
 
-const PREFILL_KEY = "bradbury_log_prefill_v1";
+const CATEGORIES = ["essay", "story", "poem"];
 
-const CATEGORIES = [
-    { key: "essay", label: "Essay" },
-    { key: "story", label: "Short Story" },
-    { key: "poem", label: "Poem" },
-];
+const LogScreen = ({ route }) => {
+    const todayKey = useMemo(() => getTodayDayKeyNY(), []);
+    const [activeDayKey, setActiveDayKey] = useState(todayKey);
 
-const categoryLabel = (key) => {
-    const found = CATEGORIES.find((c) => c.key === key);
-    return found ? found.label : key;
-};
+    const [allEntries, setAllEntries] = useState([]);
+    const [loading, setLoading] = useState(false);
 
-const parseTagsText = (text) => {
-    return String(text || "")
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean);
-};
+    const [calendarOpen, setCalendarOpen] = useState(false);
+    const [calendarMonthKey, setCalendarMonthKey] = useState(monthKeyFromDayKey(todayKey));
 
-const tagsToText = (tags) => {
-    if (!Array.isArray(tags)) return "";
-    const userTags = tags.filter(
-        (t) => !String(t).startsWith("year:") && !String(t).startsWith("type:")
-    );
-    return userTags.join(", ");
-};
-
-const isValidCategory = (c) => ["essay", "story", "poem"].includes(c);
-
-const LogScreen = () => {
-    const route = useRoute();
-
-    const dayKey = useMemo(() => getTodayDayKeyNY(), []);
-
-    const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState("");
-
-    const [selectedCategory, setSelectedCategory] = useState("essay");
-    const [isEditing, setIsEditing] = useState(true);
-
-    const [todayEntries, setTodayEntries] = useState({
-        essay: null,
-        story: null,
-        poem: null,
+    const [showForm, setShowForm] = useState(false);
+    const [formInitial, setFormInitial] = useState({
+        editingCategory: null,
+        category: "essay",
+        title: "",
+        author: "",
+        url: "",
+        rating: 5,
+        wordCount: "",
+        tagsRaw: "",
+        notes: "",
     });
 
-    const [title, setTitle] = useState("");
-    const [author, setAuthor] = useState("");
-    const [tagsText, setTagsText] = useState("");
-    const [rating, setRating] = useState(5);
-    const [wordCount, setWordCount] = useState("");
-    const [notes, setNotes] = useState("");
-
-    const [pendingPrefill, setPendingPrefill] = useState(null);
-
-    const loadToday = async () => {
+    const loadAll = async () => {
         setLoading(true);
-        setError("");
-
         try {
-            const items = await listEntries({ dayKey });
-            const next = { essay: null, story: null, poem: null };
-
-            for (const e of items) {
-                if (e.category === "essay") next.essay = e;
-                if (e.category === "story") next.story = e;
-                if (e.category === "poem") next.poem = e;
-            }
-
-            setTodayEntries(next);
+            const all = await listEntries({});
+            setAllEntries(Array.isArray(all) ? all : []);
         } catch (err) {
             console.error(err);
-            setError("Failed to load today’s entries.");
+            setAllEntries([]);
         } finally {
             setLoading(false);
         }
     };
 
-    const prefillFromEntry = (entry) => {
-        if (!entry) {
-            setTitle("");
-            setAuthor("");
-            setTagsText("");
-            setRating(5);
-            setWordCount("");
-            setNotes("");
-            return;
-        }
-
-        setTitle(entry.title || "");
-        setAuthor(entry.author || "");
-        setTagsText(tagsToText(entry.tags));
-        setRating(Number(entry.rating || 5));
-        setWordCount(entry.wordCount == null ? "" : String(entry.wordCount));
-        setNotes(entry.notes || "");
-    };
-
-    useEffect(() => {
-        loadToday();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    useEffect(() => {
-        const existing = todayEntries[selectedCategory] || null;
-
-        setIsEditing(!existing);
-        prefillFromEntry(existing);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedCategory, todayEntries.essay, todayEntries.story, todayEntries.poem]);
-
-    useEffect(() => {
-        if (!pendingPrefill) return;
-        if (pendingPrefill.category !== selectedCategory) return;
-
-        setIsEditing(true);
-        setWordCount(String(pendingPrefill.wordCount));
-        setPendingPrefill(null);
-    }, [pendingPrefill, selectedCategory]);
-
     useFocusEffect(
-        useCallback(() => {
-            let alive = true;
-
-            const run = async () => {
-                try {
-                    const raw = await AsyncStorage.getItem(PREFILL_KEY);
-                    if (!raw) return;
-
-                    const payload = JSON.parse(raw);
-                    await AsyncStorage.removeItem(PREFILL_KEY);
-
-                    if (!alive) return;
-
-                    const cat = isValidCategory(payload?.category) ? payload.category : null;
-                    const wc = Number.parseInt(String(payload?.wordCount ?? ""), 10);
-
-                    if (cat) setSelectedCategory(cat);
-
-                    if (Number.isFinite(wc) && wc > 0) {
-                        setPendingPrefill({
-                            category: cat || selectedCategory,
-                            wordCount: wc,
-                        });
-                    }
-
-                    setIsEditing(true);
-                } catch (err) {
-                    console.error("[LogScreen] Failed to read/parse prefill payload:", err);
-                    try {
-                        await AsyncStorage.removeItem(PREFILL_KEY);
-                    } catch {
-                        // ignore
-                    }
-                }
-            };
-
-            run();
-
+        useMemo(() => {
             return () => {
-                alive = false;
+                loadAll();
             };
-        }, [selectedCategory])
+        }, [])
     );
 
     useEffect(() => {
-        const catRaw = route.params?.prefillCategory;
-        if (!catRaw) return;
-
-        if (isValidCategory(catRaw)) {
-            setSelectedCategory(catRaw);
+        const incomingDayKey = route?.params?.dayKey;
+        if (incomingDayKey) {
+            const next = clampToToday(String(incomingDayKey), todayKey);
+            setActiveDayKey(next);
+            setCalendarMonthKey(monthKeyFromDayKey(next));
         }
-    }, [route.params?.prefillCategory]);
+    }, [route?.params?.dayKey, todayKey]);
 
-    const completedCount = useMemo(() => {
-        return ["essay", "story", "poem"].reduce((acc, k) => acc + (todayEntries[k] ? 1 : 0), 0);
-    }, [todayEntries]);
+    useEffect(() => {
+        const incomingWordCount = route?.params?.prefillWordCount;
+        const incomingCategory = route?.params?.prefillCategory;
 
-    const selectedEntry = todayEntries[selectedCategory] || null;
+        const hasPrefill = incomingWordCount !== undefined || incomingCategory !== undefined;
 
-    const isCompleteDay = completedCount === 3;
-    const isSelectedCategoryDone = Boolean(selectedEntry);
+        if (!hasPrefill) return;
 
-    const handleSave = async () => {
-        const safeTitle = String(title || "").trim();
-        if (!safeTitle) {
-            Alert.alert("Missing title", "Please enter a title.");
-            return;
+        setFormInitial((prev) => {
+            const next = { ...prev, editingCategory: null };
+
+            if (incomingCategory && CATEGORIES.includes(String(incomingCategory))) {
+                next.category = String(incomingCategory);
+            }
+
+            if (incomingWordCount !== undefined && incomingWordCount !== null && String(incomingWordCount).trim() !== "") {
+                next.wordCount = String(incomingWordCount);
+            }
+
+            return next;
+        });
+
+        setShowForm(true);
+    }, [route?.params?.prefillWordCount, route?.params?.prefillCategory]);
+
+    const dayEntries = useMemo(() => {
+        return allEntries.filter((e) => String(e.dayKey) === String(activeDayKey));
+    }, [allEntries, activeDayKey]);
+
+    const entriesByCategory = useMemo(() => {
+        const map = new Map();
+        for (const c of CATEGORIES) {
+            map.set(c, null);
         }
 
-        setSaving(true);
-
-        try {
-            await upsertEntryForDayCategory({
-                dayKey,
-                category: selectedCategory,
-                title: safeTitle,
-                author,
-                notes,
-                tags: parseTagsText(tagsText),
-                rating,
-                wordCount,
-            });
-
-            await loadToday();
-            setIsEditing(false);
-
-            Alert.alert("Saved", `${categoryLabel(selectedCategory)} saved for ${dayKey}.`);
-        } catch (err) {
-            console.error(err);
-            Alert.alert("Save failed", "Unable to save this entry.");
-        } finally {
-            setSaving(false);
+        for (const e of dayEntries) {
+            if (map.has(e.category)) {
+                map.set(e.category, e);
+            }
         }
+
+        return map;
+    }, [dayEntries]);
+
+    const completion = useMemo(() => {
+        const essayDone = !!entriesByCategory.get("essay");
+        const storyDone = !!entriesByCategory.get("story");
+        const poemDone = !!entriesByCategory.get("poem");
+
+        return {
+            essayDone,
+            storyDone,
+            poemDone,
+            allDone: essayDone && storyDone && poemDone,
+        };
+    }, [entriesByCategory]);
+
+    const completionMap = useMemo(() => {
+        const map = new Map();
+
+        for (const e of allEntries) {
+            const dk = String(e.dayKey || "");
+            if (!dk) continue;
+
+            if (!map.has(dk)) map.set(dk, new Set());
+            const set = map.get(dk);
+
+            if (CATEGORIES.includes(String(e.category))) {
+                set.add(String(e.category));
+            }
+        }
+
+        return map;
+    }, [allEntries]);
+
+    const getDayCompletionStatus = (dayKey) => {
+        const set = completionMap.get(String(dayKey));
+        if (!set) return "none";
+
+        const hasEssay = set.has("essay");
+        const hasStory = set.has("story");
+        const hasPoem = set.has("poem");
+
+        const count = (hasEssay ? 1 : 0) + (hasStory ? 1 : 0) + (hasPoem ? 1 : 0);
+
+        if (count === 0) return "none";
+        if (count === 3) return "full";
+        return "partial";
     };
 
-    const handleDelete = async () => {
-        const existing = todayEntries[selectedCategory];
-        if (!existing) {
-            Alert.alert("Nothing to delete", "There is no saved entry for this category today.");
-            return;
-        }
+    const goPrevDay = () => {
+        const next = addDays(activeDayKey, -1);
+        setActiveDayKey(next);
+        setShowForm(false);
+        setCalendarMonthKey(monthKeyFromDayKey(next));
+    };
 
+    const goNextDay = () => {
+        const candidate = addDays(activeDayKey, +1);
+        const next = clampToToday(candidate, todayKey);
+        setActiveDayKey(next);
+        setShowForm(false);
+        setCalendarMonthKey(monthKeyFromDayKey(next));
+    };
+
+    const goToday = () => {
+        setActiveDayKey(todayKey);
+        setShowForm(false);
+        setCalendarMonthKey(monthKeyFromDayKey(todayKey));
+    };
+
+    const openCalendar = () => {
+        setCalendarMonthKey(monthKeyFromDayKey(activeDayKey));
+        setCalendarOpen(true);
+    };
+
+    const openNewForm = () => {
+        setFormInitial({
+            editingCategory: null,
+            category: "essay",
+            title: "",
+            author: "",
+            url: "",
+            rating: 5,
+            wordCount: "",
+            tagsRaw: "",
+            notes: "",
+        });
+        setShowForm(true);
+    };
+
+    const openEditForm = (categoryKey) => {
+        const entry = entriesByCategory.get(categoryKey);
+        if (!entry) return;
+
+        setFormInitial({
+            editingCategory: categoryKey,
+            category: categoryKey,
+            title: String(entry.title || ""),
+            author: String(entry.author || ""),
+            url: String(entry.url || ""),
+            rating: Number.isFinite(entry.rating) ? entry.rating : 5,
+            wordCount: entry.wordCount === null || entry.wordCount === undefined ? "" : String(entry.wordCount),
+            tagsRaw: Array.isArray(entry.tags) ? entry.tags.join(", ") : "",
+            notes: String(entry.notes || ""),
+        });
+
+        setShowForm(true);
+    };
+
+    const confirmDelete = (categoryKey) => {
         Alert.alert(
-            "Delete entry?",
-            `Delete today’s ${categoryLabel(selectedCategory)} entry?`,
+            "Delete reading?",
+            "This will remove the logged entry for this category on this day.",
             [
                 { text: "Cancel", style: "cancel" },
                 {
@@ -255,10 +232,9 @@ const LogScreen = () => {
                     style: "destructive",
                     onPress: async () => {
                         try {
-                            await deleteEntryForDayCategory({ dayKey, category: selectedCategory });
-                            await loadToday();
-                            setIsEditing(true);
-                            Alert.alert("Deleted", "Entry deleted.");
+                            await deleteEntryForDayCategory({ dayKey: activeDayKey, category: categoryKey });
+                            await loadAll();
+                            setShowForm(false);
                         } catch (err) {
                             console.error(err);
                             Alert.alert("Delete failed", "Unable to delete this entry.");
@@ -269,229 +245,110 @@ const LogScreen = () => {
         );
     };
 
-    const handleEdit = () => {
-        const existing = todayEntries[selectedCategory] || null;
-        prefillFromEntry(existing);
-        setIsEditing(true);
-    };
+    const saveFromForm = async (payload) => {
+        try {
+            const res = await Promise.race([
+                upsertEntryForDayCategory(payload),
+                new Promise((_, reject) => setTimeout(() => reject(new Error("upsert_timeout_5000ms")), 5000)),
+            ]);
 
-    const goToNextMissing = () => {
-        const order = ["essay", "story", "poem"];
-        const missing = order.find((k) => !todayEntries[k]);
-        if (missing) setSelectedCategory(missing);
-    };
+            console.log("[LogScreen] upsert returned", res);
 
-    const pillStyleForCategory = (catKey) => {
-        const done = Boolean(todayEntries[catKey]);
-        const selected = selectedCategory === catKey;
+            await Promise.race([
+                loadAll(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error("loadAll_timeout_5000ms")), 5000)),
+            ]);
 
-        const styles = [GlobalStyles.pill];
-
-        if (selected) styles.push(GlobalStyles.pillSelected);
-        if (done) styles.push(GlobalStyles.pillSuccess);
-
-        return styles;
-    };
-
-    const pillTextColor = (catKey) => {
-        const done = Boolean(todayEntries[catKey]);
-        if (done) return Colors.text;
-        return Colors.text;
-    };
-
-    const entryCardStyle = () => {
-        if (isSelectedCategoryDone && !isEditing) {
-            return GlobalStyles.cardSuccess;
+            setShowForm(false);
+            return true;
+        } catch (err) {
+            Alert.alert("Save failed", String(err?.message || err));
+            return false;
         }
-        return GlobalStyles.card;
     };
+
+    const swipeHandlers = useDaySwipe({
+        onSwipeLeft: goNextDay,
+        onSwipeRight: goPrevDay,
+    });
+
+    const canGoNext = activeDayKey !== todayKey;
 
     return (
         <SafeAreaView style={GlobalStyles.screen}>
-            <ScrollView contentContainerStyle={GlobalStyles.content}>
-                <View style={{ gap: 4 }}>
-                    <Text style={GlobalStyles.title}>Log</Text>
-                    <Text style={GlobalStyles.subtitle}>
-                        {dayKey} • Daily credit: {completedCount}/3 {isCompleteDay ? "(complete)" : ""}
-                    </Text>
-                </View>
+            <View style={{ flex: 1 }} {...swipeHandlers}>
+                <ScrollView contentContainerStyle={GlobalStyles.content}>
+                    <LogHeaderCard
+                        subtitle={dayKeyToPretty(activeDayKey)}
+                        essayDone={completion.essayDone}
+                        storyDone={completion.storyDone}
+                        poemDone={completion.poemDone}
+                        onOpenCalendar={openCalendar}
+                        GlobalStyles={GlobalStyles}
+                        Colors={Colors}
+                    />
 
-                <View style={GlobalStyles.card}>
-                    <Text style={GlobalStyles.label}>Category</Text>
-
-                    <View style={GlobalStyles.dividerRow}>
-                        {CATEGORIES.map((c) => (
-                            <Pressable
-                                key={c.key}
-                                onPress={() => setSelectedCategory(c.key)}
-                                style={pillStyleForCategory(c.key)}
-                            >
-                                <Text style={{ fontWeight: "800", color: pillTextColor(c.key) }}>
-                                    {c.label}
-                                    {todayEntries[c.key] ? " ✓" : ""}
-                                </Text>
-                            </Pressable>
-                        ))}
-                    </View>
-
-                    <Pressable onPress={goToNextMissing} style={GlobalStyles.button}>
-                        <Text style={GlobalStyles.buttonText}>Jump to next missing</Text>
-                    </Pressable>
-                </View>
-
-                {loading ? <ActivityIndicator /> : null}
-
-                {error ? (
                     <View style={GlobalStyles.card}>
-                        <Text style={GlobalStyles.text}>{error}</Text>
+                        <DayNavRow
+                            canGoNext={canGoNext}
+                            activeIsToday={activeDayKey === todayKey}
+                            onPrev={goPrevDay}
+                            onToday={goToday}
+                            onNext={goNextDay}
+                            Colors={Colors}
+                        />
+
+                        {loading ? (
+                            <View style={{ marginTop: 10 }} />
+                        ) : null}
                     </View>
-                ) : null}
 
-                <View style={entryCardStyle()}>
-                    <Text style={GlobalStyles.label}>
-                        {selectedEntry ? "Logged" : "Log"}: {categoryLabel(selectedCategory)}
-                    </Text>
+                    {!showForm ? (
+                        <LogActionCard
+                            activeDayKey={activeDayKey}
+                            onPress={openNewForm}
+                            GlobalStyles={GlobalStyles}
+                            Colors={Colors}
+                        />
+                    ) : null}
 
-                    {selectedEntry && !isEditing ? (
-                        <View style={{ gap: 10 }}>
-                            <View style={{ gap: 4 }}>
-                                <Text style={{ fontSize: 16, fontWeight: "800", color: Colors.text }}>
-                                    {selectedEntry.title}
-                                </Text>
+                    {showForm ? (
+                        <LogReadingForm
+                            visible={showForm}
+                            activeDayKey={activeDayKey}
+                            initial={formInitial}
+                            onSave={saveFromForm}
+                            onClose={() => setShowForm(false)}
+                            GlobalStyles={GlobalStyles}
+                            Colors={Colors}
+                        />
+                    ) : null}
 
-                                {selectedEntry.author ? (
-                                    <Text style={{ color: Colors.mutedText }}>{selectedEntry.author}</Text>
-                                ) : null}
+                    <LoggedReadingsRow
+                        entriesByCategory={entriesByCategory}
+                        onEdit={openEditForm}
+                        onDelete={confirmDelete}
+                        GlobalStyles={GlobalStyles}
+                        Colors={Colors}
+                    />
+                </ScrollView>
 
-                                <Text style={{ color: Colors.mutedText }}>
-                                    Rating: {selectedEntry.rating}
-                                    {selectedEntry.wordCount != null ? ` • Words: ${selectedEntry.wordCount}` : ""}
-                                </Text>
-                            </View>
-
-                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-                                <Pressable onPress={handleEdit} style={GlobalStyles.button}>
-                                    <Text style={GlobalStyles.buttonText}>Edit</Text>
-                                </Pressable>
-
-                                <Pressable onPress={handleDelete} style={GlobalStyles.button}>
-                                    <Text style={GlobalStyles.buttonText}>Delete</Text>
-                                </Pressable>
-                            </View>
-                        </View>
-                    ) : (
-                        <View style={{ gap: 10 }}>
-                            <View style={{ gap: 6 }}>
-                                <Text style={{ fontWeight: "600", color: Colors.text }}>Title *</Text>
-                                <TextInput
-                                    value={title}
-                                    onChangeText={setTitle}
-                                    placeholder="e.g., The Veldt"
-                                    placeholderTextColor={Colors.mutedText}
-                                    style={GlobalStyles.input}
-                                />
-                            </View>
-
-                            <View style={{ gap: 6 }}>
-                                <Text style={{ fontWeight: "600", color: Colors.text }}>Author</Text>
-                                <TextInput
-                                    value={author}
-                                    onChangeText={setAuthor}
-                                    placeholder="optional"
-                                    placeholderTextColor={Colors.mutedText}
-                                    style={GlobalStyles.input}
-                                />
-                            </View>
-
-                            <View style={{ gap: 6 }}>
-                                <Text style={{ fontWeight: "600", color: Colors.text }}>Tags</Text>
-                                <Text style={GlobalStyles.muted}>
-                                    Comma-separated. Year/type tags are auto-added.
-                                </Text>
-                                <TextInput
-                                    value={tagsText}
-                                    onChangeText={setTagsText}
-                                    placeholder="e.g., sci-fi, dystopia"
-                                    placeholderTextColor={Colors.mutedText}
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                    style={GlobalStyles.input}
-                                />
-                            </View>
-
-                            <View style={{ gap: 6 }}>
-                                <Text style={{ fontWeight: "600", color: Colors.text }}>Rating</Text>
-                                <View style={GlobalStyles.dividerRow}>
-                                    {[1, 2, 3, 4, 5].map((n) => {
-                                        const selected = rating === n;
-                                        return (
-                                            <Pressable
-                                                key={n}
-                                                onPress={() => setRating(n)}
-                                                style={[
-                                                    GlobalStyles.pill,
-                                                    selected ? GlobalStyles.pillSelected : null,
-                                                ]}
-                                            >
-                                                <Text style={{ fontWeight: "800", color: Colors.text }}>{n}</Text>
-                                            </Pressable>
-                                        );
-                                    })}
-                                </View>
-                            </View>
-
-                            <View style={{ gap: 6 }}>
-                                <Text style={{ fontWeight: "600", color: Colors.text }}>Estimated word count</Text>
-                                <TextInput
-                                    value={wordCount}
-                                    onChangeText={setWordCount}
-                                    placeholder="optional"
-                                    placeholderTextColor={Colors.mutedText}
-                                    keyboardType="number-pad"
-                                    style={[GlobalStyles.input, { maxWidth: 180 }]}
-                                />
-                            </View>
-
-                            <View style={{ gap: 6 }}>
-                                <Text style={{ fontWeight: "600", color: Colors.text }}>Notes</Text>
-                                <TextInput
-                                    value={notes}
-                                    onChangeText={setNotes}
-                                    placeholder="optional"
-                                    placeholderTextColor={Colors.mutedText}
-                                    multiline
-                                    style={[GlobalStyles.input, { minHeight: 90, textAlignVertical: "top" }]}
-                                />
-                            </View>
-
-                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-                                <Pressable
-                                    onPress={handleSave}
-                                    disabled={saving}
-                                    style={[
-                                        GlobalStyles.button,
-                                        { opacity: saving ? 0.6 : 1 },
-                                    ]}
-                                >
-                                    <Text style={GlobalStyles.buttonText}>
-                                        {saving ? "Saving..." : "Save"}
-                                    </Text>
-                                </Pressable>
-
-                                {selectedEntry ? (
-                                    <Pressable onPress={() => setIsEditing(false)} style={GlobalStyles.button}>
-                                        <Text style={GlobalStyles.buttonText}>Cancel</Text>
-                                    </Pressable>
-                                ) : null}
-
-                                <Pressable onPress={handleDelete} style={GlobalStyles.button}>
-                                    <Text style={GlobalStyles.buttonText}>Delete</Text>
-                                </Pressable>
-                            </View>
-                        </View>
-                    )}
-                </View>
-            </ScrollView>
+                <CalendarModal
+                    visible={calendarOpen}
+                    activeDayKey={activeDayKey}
+                    todayKey={todayKey}
+                    monthKey={calendarMonthKey}
+                    onChangeMonthKey={setCalendarMonthKey}
+                    getDayCompletionStatus={getDayCompletionStatus}
+                    onSelectDayKey={(dk) => {
+                        setActiveDayKey(dk);
+                        setShowForm(false);
+                    }}
+                    onRequestClose={() => setCalendarOpen(false)}
+                    GlobalStyles={GlobalStyles}
+                    Colors={Colors}
+                />
+            </View>
         </SafeAreaView>
     );
 };

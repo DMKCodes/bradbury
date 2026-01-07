@@ -5,6 +5,7 @@ import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { Colors, GlobalStyles } from "../theme/theme";
+import WordCountScreenModal from "../components/wordcount/WordCountScreenModal";
 
 const PREFILL_KEY = "bradbury_log_prefill_v1";
 
@@ -22,7 +23,7 @@ const CATEGORY_CHOICES = [
 
 const LOG_SCREEN_ROUTE_NAME = "Log";
 
-const ReadingScreen = () => {
+const WordCountScreen = () => {
     const navigation = useNavigation();
 
     const [text, setText] = useState("");
@@ -47,7 +48,7 @@ const ReadingScreen = () => {
         try {
             await AsyncStorage.setItem(PREFILL_KEY, JSON.stringify(payload));
         } catch (err) {
-            console.error("[ReadingScreen] Failed to write prefill payload:", err);
+            console.error("[WordCountScreen] Failed to write prefill payload:", err);
         }
 
         setText("");
@@ -55,6 +56,7 @@ const ReadingScreen = () => {
 
         navigation.navigate(LOG_SCREEN_ROUTE_NAME, {
             prefillCategory: categoryKey,
+            prefillWordCount: wc,
         });
     };
 
@@ -62,7 +64,7 @@ const ReadingScreen = () => {
         <SafeAreaView style={GlobalStyles.screen}>
             <ScrollView contentContainerStyle={GlobalStyles.content}>
                 <View style={{ gap: 4 }}>
-                    <Text style={GlobalStyles.title}>Reading</Text>
+                    <Text style={GlobalStyles.title}>Word Count Tool</Text>
                     <Text style={GlobalStyles.subtitle}>
                         Paste text to calculate word count for logging. Nothing pasted here is saved.
                     </Text>
@@ -109,45 +111,19 @@ const ReadingScreen = () => {
                         </Pressable>
                     </View>
                 </View>
-
-                {showPicker ? (
-                    <View
-                        style={{
-                            position: "absolute",
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            backgroundColor: Colors.overlay,
-                            padding: 16,
-                            justifyContent: "center",
-                        }}
-                    >
-                        <View style={GlobalStyles.card}>
-                            <Text style={[GlobalStyles.label, { fontSize: 18 }]}>Log this reading</Text>
-                            <Text style={GlobalStyles.muted}>
-                                Word count: {wordCount.toLocaleString()}
-                            </Text>
-
-                            {CATEGORY_CHOICES.map((c) => (
-                                <Pressable
-                                    key={c.key}
-                                    onPress={() => handlePick(c.key)}
-                                    style={GlobalStyles.button}
-                                >
-                                    <Text style={GlobalStyles.buttonText}>{c.label}</Text>
-                                </Pressable>
-                            ))}
-
-                            <Pressable onPress={() => setShowPicker(false)} style={GlobalStyles.button}>
-                                <Text style={GlobalStyles.buttonText}>Cancel</Text>
-                            </Pressable>
-                        </View>
-                    </View>
-                ) : null}
             </ScrollView>
+
+            <WordCountScreenModal
+                visible={showPicker}
+                wordCount={wordCount}
+                choices={CATEGORY_CHOICES}
+                onPick={handlePick}
+                onCancel={() => setShowPicker(false)}
+                GlobalStyles={GlobalStyles}
+                Colors={Colors}
+            />
         </SafeAreaView>
     );
 };
 
-export default ReadingScreen;
+export default WordCountScreen;

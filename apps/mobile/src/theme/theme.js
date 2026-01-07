@@ -1,10 +1,10 @@
 import { StyleSheet } from "react-native";
 
 const Colors = {
-    bg: "#242423",          // warm charcoal
-    surface: "#333533",     // slightly lighter surface
-    surface2: "#1b1b1d",    // alternate surface
-    border: "#cfdbd5",      // muted warm border
+    bg: "#242423",
+    surface: "#333533",
+    surface2: "#1b1b1d",
+    border: "#cfdbd5",
     text: "#F5F2EA",
     mutedText: "#B9B1A4",
     accent: "#e6af2e",
