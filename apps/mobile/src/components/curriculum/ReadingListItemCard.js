@@ -19,7 +19,7 @@ const ReadingListItemCard = ({
     const sortedItems = useMemo(() => {
         const arr = Array.isArray(items) ? items : [];
 
-        // Stable sort: preserve original ordering within unfinished/finished groups.
+        // Stable sort: preserve original ordering within groups.
         return arr
             .map((item, index) => ({ item, index }))
             .sort((a, b) => {
@@ -27,7 +27,7 @@ const ReadingListItemCard = ({
                 const bf = b.item?.finished ? 1 : 0;
                 if (af !== bf) return af - bf;
 
-                // If an explicit order exists, prefer it (otherwise preserve original order).
+                // If explicit order exists, prefer it.
                 const ao = Number.isFinite(a.item?.order) ? a.item.order : null;
                 const bo = Number.isFinite(b.item?.order) ? b.item.order : null;
 

@@ -54,10 +54,10 @@ const getMonthGrid = (monthKey) => {
     if (!dt) return { year: "", monthIndex: 0, weeks: [] };
 
     const year = dt.getUTCFullYear();
-    const monthIndex = dt.getUTCMonth(); // 0-11
+    const monthIndex = dt.getUTCMonth();
 
     const firstOfMonth = new Date(Date.UTC(year, monthIndex, 1));
-    const firstWeekday = firstOfMonth.getUTCDay(); // 0=Sun
+    const firstWeekday = firstOfMonth.getUTCDay(); 
 
     const daysInMonth = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
 

@@ -68,9 +68,6 @@ const SettingsScreen = () => {
                                 "Import complete",
                                 `Imported ${res.imported} key(s).\nSet: ${res.set}\nRemoved: ${res.removed}`
                             );
-
-                            // Optionally clear the box after success
-                            // setImportJson("");
                         } catch (err) {
                             console.error(err);
                             Alert.alert("Import failed", "Unable to import local data.");
