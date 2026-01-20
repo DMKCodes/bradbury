@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  entries      Entry[]
+  topics       Topic[]
+}
+
+model Entry {
+  id        String        @id @default(cuid())
+  userId    String
+  dayKey    String
+  category  EntryCategory
+  title     String
+  author    String        @default("")
+  url       String        @default("")
+  notes     String        @default("")
+  rating    Int           @default(5)
+  wordCount Int?
+  tags      String[]      @default([])
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dayKey, category])
+  @@index([userId, dayKey])
+}
+
+model Topic {
+  id        String      @id @default(cuid())
+  userId    String
+  name      String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     TopicItem[]
+
+  @@index([userId])
+}
+
+model TopicItem {
+  id         String       @id @default(cuid())
+  topicId    String
+  title      String
+  url        String       @default("")
+  category   ItemCategory
+  author     String       @default("")
+  wordCount  Int?
+  notes      String       @default("")
+  tags       String[]     @default([])
+  finished   Boolean      @default(false)
+  finishedAt DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  topic      Topic        @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([topicId])
+}
+
+enum EntryCategory {
+  essay
+  story
+  poem
+}
+
+enum ItemCategory {
+  essay
+  story
+  poem
+}
