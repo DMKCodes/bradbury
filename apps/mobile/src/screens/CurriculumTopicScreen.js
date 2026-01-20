@@ -21,7 +21,7 @@ const CurriculumTopicScreen = ({ route }) => {
 
     const [title, setTitle] = useState("");
     const [url, setUrl] = useState("");
-    const [type, setType] = useState("book");
+    const [type, setType] = useState("essay");
 
     const load = async () => {
         setLoading(true);
@@ -68,7 +68,7 @@ const CurriculumTopicScreen = ({ route }) => {
 
         setTitle("");
         setUrl("");
-        setType("book");
+        setType("essay");
         load();
     };
 

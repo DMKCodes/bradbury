@@ -2,7 +2,6 @@ import React, { useMemo } from "react";
 import { Alert, Linking, Pressable, Text, View } from "react-native";
 
 const TYPE_OPTIONS = [
-    { key: "book", label: "Book" },
     { key: "essay", label: "Essay" },
     { key: "story", label: "Short Story" },
     { key: "poem", label: "Poem" },

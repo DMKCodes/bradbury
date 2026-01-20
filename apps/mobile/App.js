@@ -15,7 +15,6 @@ import HistoryScreen from "./src/screens/HistoryScreen";
 import StatsScreen from "./src/screens/StatsScreen";
 import InsightsScreen from "./src/screens/InsightsScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
-import BooksScreen from "./src/screens/BooksScreen";
 
 const Stack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
@@ -156,12 +155,6 @@ const App = () => {
                     name="Stats"
                     component={StatsScreen}
                     options={{ title: "Stats" }}
-                />
-
-                <Stack.Screen
-                    name="Books"
-                    component={BooksScreen}
-                    options={{ title: "Books" }}
                 />
 
                 <Stack.Screen

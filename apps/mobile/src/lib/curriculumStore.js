@@ -13,7 +13,7 @@ const KEY = "bradbury_curriculum_v1";
 //           id: "i_...",
 //           title: "The Design of Everyday Things",
 //           url: "https://...",
-//           type: "book" | "essay" | "story" | "poem",
+//           type: "essay" | "story" | "poem",
 //           finished: false,
 //           createdAt: 123456
 //         }
@@ -97,7 +97,7 @@ export const addTopicItem = async ({ topicId, title, url, type }) => {
 
     if (!safeTitle) return { ok: false, error: "title_required" };
 
-    const allowed = ["book", "essay", "story", "poem"];
+    const allowed = ["essay", "story", "poem"];
     if (!allowed.includes(safeType)) return { ok: false, error: "invalid_type" };
 
     const data = await loadCurriculum();

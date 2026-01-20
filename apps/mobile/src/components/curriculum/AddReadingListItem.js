@@ -2,7 +2,6 @@ import React from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
 const TYPE_OPTIONS = [
-    { key: "book", label: "Book" },
     { key: "essay", label: "Essay" },
     { key: "story", label: "Short Story" },
     { key: "poem", label: "Poem" },

@@ -3,17 +3,17 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-nati
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { getTodayDayKeyNY, listEntries } from "../lib/store";
-import { listBooks } from "../lib/booksStore";
 import { Colors, GlobalStyles } from "../theme/theme";
 
 const TYPE_LABELS = {
     essay: "Essay",
     story: "Short Story",
     poem: "Poem",
-    book: "Book",
 };
 
-const isValidBradburyType = (t) => ["essay", "story", "poem"].includes(t);
+const TYPES = ["essay", "story", "poem"];
+
+const isValidBradburyType = (t) => TYPES.includes(String(t));
 
 const parseYearFromTags = (tags) => {
     if (!Array.isArray(tags)) return null;
@@ -24,7 +24,11 @@ const parseYearFromTags = (tags) => {
 };
 
 const safeInt = (v) => {
-    const n = Number.parseInt(String(v), 10);
+    if (v === null || v === undefined) return null;
+    const s = String(v).trim();
+    if (!s) return null;
+
+    const n = Number.parseInt(s, 10);
     return Number.isFinite(n) ? n : null;
 };
 
@@ -77,9 +81,7 @@ const StatsScreen = () => {
     const [error, setError] = useState("");
 
     const [selectedYear, setSelectedYear] = useState("All");
-
     const [challengeEntries, setChallengeEntries] = useState([]);
-    const [books, setBooks] = useState([]);
 
     const load = async () => {
         setLoading(true);
@@ -89,14 +91,10 @@ const StatsScreen = () => {
             const allEntries = await listEntries({});
             const onlyChallenge = (allEntries || []).filter((e) => isValidBradburyType(e.category));
             setChallengeEntries(onlyChallenge);
-
-            const allBooks = await listBooks({});
-            setBooks(allBooks || []);
         } catch (err) {
             console.error(err);
             setError("Failed to load stats data.");
             setChallengeEntries([]);
-            setBooks([]);
         } finally {
             setLoading(false);
         }
@@ -114,13 +112,8 @@ const StatsScreen = () => {
             if (y) years.add(String(y));
         }
 
-        for (const b of books) {
-            const y = String(b.year || "").trim();
-            if (y) years.add(y);
-        }
-
         return [...years].sort((a, b) => (a < b ? 1 : -1));
-    }, [challengeEntries, books]);
+    }, [challengeEntries]);
 
     const yearFilteredChallenge = useMemo(() => {
         if (selectedYear === "All") return challengeEntries;
@@ -131,52 +124,37 @@ const StatsScreen = () => {
         });
     }, [challengeEntries, selectedYear]);
 
-    const yearFilteredBooks = useMemo(() => {
-        if (selectedYear === "All") return books;
-        return books.filter((b) => String(b.year) === String(selectedYear));
-    }, [books, selectedYear]);
-
-    const unifiedItems = useMemo(() => {
-        const fromChallenge = yearFilteredChallenge.map((e) => {
+    const normalizedItems = useMemo(() => {
+        return yearFilteredChallenge.map((e) => {
             const y = parseYearFromTags(e.tags) || (e.dayKey ? String(e.dayKey).slice(0, 4) : null);
 
             return {
-                kind: "challenge",
-                type: e.category,
+                type: String(e.category),
                 year: y,
                 rating: safeNum(e.rating),
                 wordCount: safeInt(e.wordCount),
+                dayKey: String(e.dayKey || ""),
             };
         });
-
-        const fromBooks = yearFilteredBooks.map((b) => {
-            return {
-                kind: "book",
-                type: "book",
-                year: b.year,
-                rating: safeNum(b.rating),
-                wordCount: safeInt(b.wordCount),
-            };
-        });
-
-        return [...fromChallenge, ...fromBooks];
-    }, [yearFilteredChallenge, yearFilteredBooks]);
+    }, [yearFilteredChallenge]);
 
     const countsByType = useMemo(() => {
-        const counts = { essay: 0, story: 0, poem: 0, book: 0 };
-        for (const it of unifiedItems) {
-            if (counts[it.type] == null) continue;
+        const counts = { essay: 0, story: 0, poem: 0 };
+
+        for (const it of normalizedItems) {
+            if (!counts[it.type] && counts[it.type] !== 0) continue;
             counts[it.type] += 1;
         }
+
         return counts;
-    }, [unifiedItems]);
+    }, [normalizedItems]);
 
     const totals = useMemo(() => {
         let totalWords = 0;
         let totalRatings = 0;
         let ratingCount = 0;
 
-        for (const it of unifiedItems) {
+        for (const it of normalizedItems) {
             if (it.wordCount != null) totalWords += it.wordCount;
 
             if (it.rating != null) {
@@ -192,17 +170,16 @@ const StatsScreen = () => {
             avgRating,
             ratingCount,
         };
-    }, [unifiedItems]);
+    }, [normalizedItems]);
 
     const perTypeAverages = useMemo(() => {
         const agg = {
             essay: initTypeAgg(),
             story: initTypeAgg(),
             poem: initTypeAgg(),
-            book: initTypeAgg(),
         };
 
-        for (const it of unifiedItems) {
+        for (const it of normalizedItems) {
             if (!agg[it.type]) continue;
 
             agg[it.type].count += 1;
@@ -231,19 +208,22 @@ const StatsScreen = () => {
         }
 
         return out;
-    }, [unifiedItems]);
+    }, [normalizedItems]);
 
     const challengeStreakStats = useMemo(() => {
         const dayToTypes = new Map();
 
         for (const e of yearFilteredChallenge) {
-            const dayKey = e.dayKey;
+            const dayKey = String(e.dayKey || "");
             if (!dayKey) continue;
 
             if (!dayToTypes.has(dayKey)) {
                 dayToTypes.set(dayKey, new Set());
             }
-            dayToTypes.get(dayKey).add(e.category);
+
+            if (isValidBradburyType(e.category)) {
+                dayToTypes.get(dayKey).add(String(e.category));
+            }
         }
 
         const completeDays = new Set();
@@ -278,7 +258,7 @@ const StatsScreen = () => {
                 <View style={{ gap: 4 }}>
                     <Text style={GlobalStyles.title}>Stats</Text>
                     <Text style={GlobalStyles.subtitle}>
-                        Review your reading stats by year or all-time. 
+                        Review your reading stats by year or all-time.
                     </Text>
                 </View>
 
@@ -340,7 +320,7 @@ const StatsScreen = () => {
                 <View style={GlobalStyles.card}>
                     <Text style={GlobalStyles.label}>Finished counts</Text>
 
-                    {Object.keys(TYPE_LABELS).map((k) => (
+                    {TYPES.map((k) => (
                         <Text key={k} style={GlobalStyles.muted}>
                             {TYPE_LABELS[k]}:{" "}
                             <Text style={{ fontWeight: "800", color: Colors.text }}>
@@ -351,7 +331,7 @@ const StatsScreen = () => {
                 </View>
 
                 <View style={GlobalStyles.card}>
-                    <Text style={GlobalStyles.label}>Totals (including books for now)</Text>
+                    <Text style={GlobalStyles.label}>Totals</Text>
 
                     <Text style={GlobalStyles.muted}>
                         Total estimated words:{" "}
@@ -365,14 +345,16 @@ const StatsScreen = () => {
                         <Text style={{ fontWeight: "800", color: Colors.text }}>
                             {formatAvg(totals.avgRating)}
                         </Text>{" "}
-                        <Text style={GlobalStyles.muted}>({totals.ratingCount} rated item(s))</Text>
+                        <Text style={GlobalStyles.muted}>
+                            ({totals.ratingCount} rated item(s))
+                        </Text>
                     </Text>
                 </View>
 
                 <View style={GlobalStyles.card}>
                     <Text style={GlobalStyles.label}>Category averages</Text>
 
-                    {Object.keys(TYPE_LABELS).map((k) => {
+                    {TYPES.map((k) => {
                         const a = perTypeAverages[k];
 
                         return (

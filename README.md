@@ -34,7 +34,7 @@ The primary data unit is a "Reading Entry" stored on-device:
 ```js
 {
     dayKey: "YYYY-MM-DD",
-    category: "essay" | "story" | "poem" | "book",
+    category: "essay" | "story" | "poem",
     title: string,
     author: string,
     url?: string,
