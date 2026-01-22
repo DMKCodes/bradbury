@@ -1,0 +1,142 @@
+:root {
+    font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    font-weight: 400;
+
+    --bg: #242423;
+    --surface: #333533;
+    --surface2: #1b1b1d;
+    --border: #cfdbd5;
+
+    --text: #F5F2EA;
+    --mutedText: #B9B1A4;
+
+    --accent: #e6af2e;
+    --accent2: #14B8A6;
+
+    --success: #22C55E;
+    --danger: #EF4444;
+
+    --overlay: rgba(0, 0, 0, 0.45);
+    --successTint: rgba(34, 197, 94, 0.14);
+    --dangerTint: rgba(239, 68, 68, 0.14);
+
+    --space-xs: 6px;
+    --space-sm: 10px;
+    --space-md: 16px;
+    --space-lg: 20px;
+
+    --radius-sm: 8px;
+    --radius-md: 10px;
+    --radius-pill: 999px;
+
+    --h1: 32px;
+    --h2: 22px;
+    --body: 16px;
+
+    --shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-size: var(--body);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    line-height: 1.4;
+    padding: 16px;
+}
+
+a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+h1,
+h2,
+h3 {
+    margin: 0;
+}
+
+h1 {
+    font-size: var(--h1);
+    font-weight: 600;
+}
+
+h2 {
+    font-size: var(--h2);
+    font-weight: 600;
+}
+
+p {
+    margin: 0;
+}
+
+hr {
+    border: 0;
+    border-top: 1px solid var(--border);
+    opacity: 0.6;
+}
+
+.muted {
+    color: var(--mutedText);
+}
+
+.error {
+    color: var(--danger);
+}
+
+.success {
+    color: var(--success);
+}
+
+.card {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+}
+
+.card--success {
+    border-color: var(--success);
+    background: var(--successTint);
+}
+
+.card--danger {
+    border-color: var(--danger);
+    background: var(--dangerTint);
+}
+
+.pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text);
+    font-weight: 800;
+}
+
+.pill--selected {
+    background: var(--surface2);
+}
+
+.pill--success {
+    border-color: var(--success);
+    background: var(--successTint);
+}

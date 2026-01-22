@@ -1,0 +1,92 @@
+input,
+textarea,
+select {
+    width: 100%;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    padding: 10px;
+    outline: none;
+}
+
+textarea {
+    resize: vertical;
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: color-mix(in srgb, var(--mutedText) 80%, transparent);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+label {
+    display: block;
+}
+
+/* Form layout helpers (use if you want to remove inline styles later) */
+.form {
+    display: grid;
+    gap: var(--space-sm);
+}
+
+.field {
+    display: grid;
+    gap: 6px;
+}
+
+.field__label {
+    font-weight: 800;
+    color: var(--text);
+}
+
+.field__hint {
+    color: var(--mutedText);
+    font-size: 12px;
+}
+
+.row {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+/* Buttons */
+button {
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+button:hover {
+    border-color: var(--accent);
+}
+
+button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.button--accent {
+    border-color: var(--accent);
+}
+
+.button--danger {
+    border-color: var(--danger);
+    background: var(--dangerTint);
+}
+
+.button--success {
+    border-color: var(--success);
+    background: var(--successTint);
+}
