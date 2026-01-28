@@ -1,13 +1,16 @@
 import "dotenv/config";
+
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
+
 import prisma from "./lib/prisma.js";
 
 import { authRouter } from "./routes/auth.js";
 import { entriesRouter } from "./routes/entries.js";
 import { topicsRouter } from "./routes/topics.js";
+import { statsRouter } from "./routes/stats.js";
 
 const app = express();
 
@@ -36,6 +39,7 @@ app.get("/health", (_req, res) => {
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/entries", entriesRouter);
 app.use("/api/v1/topics", topicsRouter);
+app.use("/api/v1/stats", statsRouter);
 
 app.get("/db-check", async (req, res) => {
     try {

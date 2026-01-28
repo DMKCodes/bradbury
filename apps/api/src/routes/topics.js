@@ -275,7 +275,7 @@ topicsRouter.post("/items/toggle", async (req, res, next) => {
     }
 });
 
-// DELETE /topics/items/:itemId (kept as-is; still works)
+// DELETE /topics/items/:itemId
 topicsRouter.delete("/items/:itemId", async (req, res, next) => {
     try {
         const itemId = String(req.params.itemId || "").trim();
