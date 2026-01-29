@@ -87,11 +87,29 @@ const addTopicItem = async (topicId, payload) => {
 };
 
 const toggleTopicItemFinished = async (topicId, itemId) => {
-    return apiFetch(`/topics/${encodeURIComponent(String(topicId))}/items/${encodeURIComponent(String(itemId))}/toggle`, { method: "POST" });
+    return apiFetch(
+        `/topics/${encodeURIComponent(String(topicId))}/items/${encodeURIComponent(String(itemId))}/toggle`,
+        { method: "POST" }
+    );
 };
 
 const deleteTopicItem = async (topicId, itemId) => {
     return apiFetch(`/topics/${encodeURIComponent(String(topicId))}/items/${encodeURIComponent(String(itemId))}`, { method: "DELETE" });
+};
+
+/**
+ * getStats
+ *
+ * Server-backed stats. Computation done server-side for performance/scalability.
+ *
+ * API:
+ *   GET /stats?year=All|YYYY
+ */
+const getStats = async ({ year = "All" } = {}) => {
+    const params = new URLSearchParams();
+    if (year) params.set("year", String(year));
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    return apiFetch(`/stats${qs}`, { method: "GET" });
 };
 
 export {
@@ -110,4 +128,5 @@ export {
     addTopicItem,
     toggleTopicItemFinished,
     deleteTopicItem,
+    getStats,
 };
