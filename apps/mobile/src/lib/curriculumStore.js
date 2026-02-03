@@ -1,7 +1,16 @@
+/**
+ * curriculumStore.js
+ *
+ * Local curriculum store (AsyncStorage).
+ * Hydrate from server w/ replaceCurriculum to update local data.
+ *
+ */
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const KEY = "bradbury_curriculum_v1";
 
+// Persisted shape:
 // {
 //   topics: [
 //     {
@@ -11,8 +20,8 @@ const KEY = "bradbury_curriculum_v1";
 //       items: [
 //         {
 //           id: "i_...",
-//           title: "The Design of Everyday Things",
-//           url: "https://...",
+//           title: "…",
+//           url: "…",
 //           type: "essay" | "story" | "poem",
 //           finished: false,
 //           createdAt: 123456
@@ -35,7 +44,7 @@ const nowId = (prefix) => {
     return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 };
 
-export const loadCurriculum = async () => {
+const loadCurriculum = async () => {
     const raw = await AsyncStorage.getItem(KEY);
     const data = safeParse(raw, { topics: [] });
 
@@ -46,17 +55,29 @@ export const loadCurriculum = async () => {
     return data;
 };
 
-export const saveCurriculum = async (data) => {
+const saveCurriculum = async (data) => {
     await AsyncStorage.setItem(KEY, JSON.stringify(data));
 };
 
-export const listTopics = async () => {
+/**
+ * replaceCurriculum
+ *
+ * Used by server hydration to overwrite local data.
+ * Writes { topics: [...] } into the existing key.
+ */
+const replaceCurriculum = async (data) => {
+    const safeTopics = Array.isArray(data?.topics) ? data.topics : [];
+    await saveCurriculum({ topics: safeTopics });
+    return { ok: true, topics: safeTopics.length };
+};
+
+const listTopics = async () => {
     const data = await loadCurriculum();
     const topics = Array.isArray(data.topics) ? data.topics : [];
     return [...topics].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 };
 
-export const addTopic = async (name) => {
+const addTopic = async (name) => {
     const safeName = String(name || "").trim();
     if (!safeName) {
         return { ok: false, error: "name_required" };
@@ -77,20 +98,20 @@ export const addTopic = async (name) => {
     return { ok: true, topic };
 };
 
-export const deleteTopic = async (topicId) => {
+const deleteTopic = async (topicId) => {
     const data = await loadCurriculum();
     data.topics = (data.topics || []).filter((t) => t.id !== topicId);
     await saveCurriculum(data);
     return { ok: true };
 };
 
-export const getTopicById = async (topicId) => {
+const getTopicById = async (topicId) => {
     const data = await loadCurriculum();
     const found = (data.topics || []).find((t) => t.id === topicId);
     return found || null;
 };
 
-export const addTopicItem = async ({ topicId, title, url, type }) => {
+const addTopicItem = async ({ topicId, title, url, type }) => {
     const safeTitle = String(title || "").trim();
     const safeUrl = String(url || "").trim();
     const safeType = String(type || "").trim();
@@ -119,7 +140,7 @@ export const addTopicItem = async ({ topicId, title, url, type }) => {
     return { ok: true, item };
 };
 
-export const toggleTopicItemFinished = async ({ topicId, itemId }) => {
+const toggleTopicItemFinished = async ({ topicId, itemId }) => {
     const data = await loadCurriculum();
     const topic = (data.topics || []).find((t) => t.id === topicId);
     if (!topic) return { ok: false, error: "topic_not_found" };
@@ -133,7 +154,7 @@ export const toggleTopicItemFinished = async ({ topicId, itemId }) => {
     return { ok: true, item };
 };
 
-export const deleteTopicItem = async ({ topicId, itemId }) => {
+const deleteTopicItem = async ({ topicId, itemId }) => {
     const data = await loadCurriculum();
     const topic = (data.topics || []).find((t) => t.id === topicId);
     if (!topic) return { ok: false, error: "topic_not_found" };
@@ -142,4 +163,18 @@ export const deleteTopicItem = async ({ topicId, itemId }) => {
 
     await saveCurriculum(data);
     return { ok: true };
+};
+
+export {
+    KEY,
+    loadCurriculum,
+    saveCurriculum,
+    replaceCurriculum,
+    listTopics,
+    addTopic,
+    deleteTopic,
+    getTopicById,
+    addTopicItem,
+    toggleTopicItemFinished,
+    deleteTopicItem,
 };

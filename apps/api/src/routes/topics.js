@@ -73,7 +73,6 @@ topicsRouter.post("/", async (req, res, next) => {
     }
 });
 
-// IMPORTANT: implement GET /topics/:topicId (web expects this)
 topicsRouter.get("/:topicId", async (req, res, next) => {
     try {
         const topicId = String(req.params.topicId || "").trim();
@@ -115,7 +114,7 @@ topicsRouter.delete("/:topicId", async (req, res, next) => {
     }
 });
 
-// ---------- RESTful TopicItem routes (web expects these) ----------
+// ---------- RESTful TopicItem routes ----------
 
 // POST /topics/:topicId/items
 topicsRouter.post("/:topicId/items", async (req, res, next) => {
@@ -226,8 +225,6 @@ topicsRouter.delete("/:topicId/items/:itemId", async (req, res, next) => {
     }
 });
 
-// ---------- Back-compat routes (your existing ones) ----------
-
 // POST /topics/items  (expects { topicId, ...body })
 topicsRouter.post("/items", async (req, res, next) => {
     try {
@@ -242,7 +239,7 @@ topicsRouter.post("/items", async (req, res, next) => {
             return res.status(400).json({ ok: false, error: "invalid_input" });
         }
 
-        // Reuse REST handler by calling the same logic
+        // Reuse REST handler
         req.params.topicId = parsed.data.topicId;
         return topicsRouter.handle(req, res, next);
     } catch (err) {

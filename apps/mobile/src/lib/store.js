@@ -1,3 +1,14 @@
+/**
+ * store.js
+ *
+ * Local entries store (AsyncStorage).
+ *
+ * Phase 1 change:
+ * - Add replaceAllEntries(entries) to support "hydrate from server" (Settings action).
+ *
+ * Everything else is preserved as-is.
+ */
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const KEY_ENTRIES = "bradbury_entries_v1";
@@ -78,6 +89,7 @@ const readAll = async () => {
         return payload.entries;
     }
 
+    // Backward compatibility with older shapes (if they exist).
     if (payload && payload.byProfile && typeof payload.byProfile === "object") {
         const values = Object.values(payload.byProfile);
         for (const v of values) {
@@ -99,6 +111,21 @@ const readAll = async () => {
 
 const writeAll = async (entries) => {
     await AsyncStorage.setItem(KEY_ENTRIES, JSON.stringify({ entries }));
+};
+
+/**
+ * replaceAllEntries
+ *
+ * - Used by server hydration to overwrite local entries.
+ * - Simple write into existing storage key.
+ * - Does NOT validate every field (serverHydrate normalizes).
+ * - Keeps persisted shape identical to what app expects.
+ * 
+ */
+const replaceAllEntries = async (entries) => {
+    const safe = Array.isArray(entries) ? entries : [];
+    await writeAll(safe);
+    return { ok: true, count: safe.length };
 };
 
 const listEntries = async ({ dayKey } = {}) => {
@@ -187,8 +214,10 @@ const deleteEntryForDayCategory = async ({ dayKey, category }) => {
 };
 
 export {
+    KEY_ENTRIES,
     getTodayDayKeyNY,
     listEntries,
     upsertEntryForDayCategory,
     deleteEntryForDayCategory,
+    replaceAllEntries,
 };

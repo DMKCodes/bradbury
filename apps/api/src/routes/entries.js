@@ -114,7 +114,6 @@ entriesRouter.delete("/", async (req, res, next) => {
 
         return res.json({ ok: true });
     } catch (err) {
-        // If doesn't exist, treat as ok for idempotency
         if (err?.code === "P2025") {
             return res.json({ ok: true });
         }
