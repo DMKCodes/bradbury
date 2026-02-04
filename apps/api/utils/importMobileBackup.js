@@ -33,7 +33,6 @@ import path from "path";
 import process from "process";
 
 // IMPORTANT: use the same Prisma instance as the API server.
-// In Batch B, server.js imports prisma from "./lib/prisma.js". :contentReference[oaicite:2]{index=2}
 import prisma from "../src/lib/prisma.js";
 
 const parseArgs = (argv) => {
@@ -45,7 +44,6 @@ const parseArgs = (argv) => {
         const key = a.slice(2).trim();
         const next = argv[i + 1];
 
-        // flags
         if (key === "dry-run" || key === "dryRun") {
             out.dryRun = true;
             continue;
@@ -55,7 +53,6 @@ const parseArgs = (argv) => {
             continue;
         }
 
-        // key/value
         if (next && !next.startsWith("--")) {
             out[key] = next;
             i += 1;
@@ -81,9 +78,7 @@ const isValidCategory = (v) => {
 
 const normalizeTags = (tags) => {
     if (!Array.isArray(tags)) return [];
-    return tags
-        .map((t) => String(t || "").trim())
-        .filter(Boolean);
+    return tags.map((t) => String(t || "").trim()).filter(Boolean);
 };
 
 const toDateOrNull = (ms) => {
@@ -135,7 +130,7 @@ const main = async () => {
     const backup = outerParsed.value || {};
     const dataMap = backup.data || {};
 
-    // These are stringified JSON in the mobile export (see your file). :contentReference[oaicite:3]{index=3}
+    // These are stringified JSON in the mobile export.
     const curriculumRaw = dataMap.bradbury_curriculum_v1 || "";
     const entriesRaw = dataMap.bradbury_entries_v1 || "";
 
@@ -178,13 +173,15 @@ const main = async () => {
     const entries = Array.isArray(entriesBlob?.entries) ? entriesBlob.entries : [];
     const topics = Array.isArray(curriculum?.topics) ? curriculum.topics : [];
 
-    // --- Build normalized import payloads ---
-
+    // --- Normalize entries ---
     const entryRows = [];
     for (const e of entries) {
         const dayKey = String(e?.dayKey || "").trim();
         const category = String(e?.category || "").trim();
         if (!dayKey || !isValidCategory(category)) continue;
+
+        const createdAt = toDateOrNull(e?.createdAt);
+        const updatedAt = toDateOrNull(e?.updatedAt);
 
         entryRows.push({
             userId,
@@ -192,44 +189,51 @@ const main = async () => {
             category,
             title: String(e?.title || "").trim() || "(untitled)",
             author: String(e?.author || "").trim(),
-            url: String(e?.url || "").trim(), // mobile export may not have it; defaults to ""
+            url: String(e?.url || "").trim(),
             notes: String(e?.notes || "").trim(),
             rating: Number.isFinite(Number(e?.rating)) ? Number(e.rating) : 5,
             wordCount: e?.wordCount === null || e?.wordCount === undefined ? null : Number(e.wordCount),
             tags: normalizeTags(e?.tags),
-            createdAt: toDateOrNull(e?.createdAt),
-            updatedAt: toDateOrNull(e?.updatedAt),
+            ...(createdAt ? { createdAt } : null),
+            ...(updatedAt ? { updatedAt } : null),
         });
     }
 
+    // --- Normalize topics + items ---
     const topicRows = [];
     for (const t of topics) {
         const name = String(t?.name || "").trim();
         if (!name) continue;
 
         const items = Array.isArray(t?.items) ? t.items : [];
+        const normalizedItems = items
+            .map((it) => {
+                const category = String(it?.type || it?.category || "").trim();
+                if (!isValidCategory(category)) return null;
+
+                const createdAt = toDateOrNull(it?.createdAt);
+                const finished = Boolean(it?.finished);
+                const finishedAt = finished ? (toDateOrNull(it?.finishedAt) || new Date()) : null;
+
+                return {
+                    title: String(it?.title || "").trim() || "(untitled)",
+                    url: String(it?.url || "").trim(),
+                    category,
+                    author: String(it?.author || "").trim(),
+                    wordCount: it?.wordCount === null || it?.wordCount === undefined ? null : Number(it.wordCount),
+                    notes: String(it?.notes || "").trim(),
+                    tags: normalizeTags(it?.tags),
+                    finished,
+                    finishedAt,
+                    ...(createdAt ? { createdAt } : null),
+                };
+            })
+            .filter(Boolean);
+
         topicRows.push({
             userId,
             name,
-            items: items
-                .map((it) => {
-                    const category = String(it?.type || it?.category || "").trim();
-                    if (!isValidCategory(category)) return null;
-
-                    return {
-                        title: String(it?.title || "").trim() || "(untitled)",
-                        url: String(it?.url || "").trim(),
-                        category,
-                        author: String(it?.author || "").trim(),
-                        wordCount: it?.wordCount === null || it?.wordCount === undefined ? null : Number(it.wordCount),
-                        notes: String(it?.notes || "").trim(),
-                        tags: normalizeTags(it?.tags),
-                        finished: Boolean(it?.finished),
-                        finishedAt: it?.finished ? (toDateOrNull(it?.finishedAt) || new Date()) : null,
-                        createdAt: toDateOrNull(it?.createdAt),
-                    };
-                })
-                .filter(Boolean),
+            items: normalizedItems,
         });
     }
 
@@ -246,68 +250,155 @@ const main = async () => {
         return;
     }
 
-    // --- Execute import ---
-    await prisma.$transaction(async (tx) => {
-        if (purge) {
-            // Delete in dependency order (TopicItem -> Topic, Entry).
-            // TopicItem cascades on Topic delete, but explicit order is safer.
-            await tx.entry.deleteMany({ where: { userId } });
-            await tx.topic.deleteMany({ where: { userId } });
-        }
+    // ============================================================
+    // IMPORTANT CHANGE:
+    // - No interactive transaction callback.
+    // - Purge path uses createMany() for speed.
+    // This avoids Prisma's default 5s interactive transaction timeout.
+    // ============================================================
 
-        // Upsert Entries by @@unique([userId, dayKey, category]) :contentReference[oaicite:4]{index=4}
-        for (const row of entryRows) {
-            const { createdAt, updatedAt, ...data } = row;
+    if (purge) {
+        console.log("[import] Purging existing user data...");
 
-            await tx.entry.upsert({
-                where: {
-                    userId_dayKey_category: {
-                        userId: data.userId,
-                        dayKey: data.dayKey,
-                        category: data.category,
-                    },
-                },
-                create: {
-                    ...data,
-                    ...(createdAt ? { createdAt } : null),
-                    ...(updatedAt ? { updatedAt } : null),
-                },
-                update: {
-                    ...data,
-                    // On update, Prisma may override updatedAt due to @updatedAt in schema.
-                    // That’s OK for now; conflict resolution later can rely on server updatedAt.
-                },
+        // Delete in safe order: TopicItem -> Topic -> Entry
+        const existingTopics = await prisma.topic.findMany({
+            where: { userId },
+            select: { id: true },
+        });
+        const topicIds = existingTopics.map((t) => t.id);
+
+        if (topicIds.length > 0) {
+            await prisma.topicItem.deleteMany({
+                where: { topicId: { in: topicIds } },
             });
         }
 
-        // Create Topics and TopicItems.
-        // NOTE: Topic has no unique constraint on (userId, name) in schema, so we avoid upsert.
-        // If you want idempotent imports later, we can add @@unique([userId, name]) and then upsert.
+        await prisma.topic.deleteMany({ where: { userId } });
+        await prisma.entry.deleteMany({ where: { userId } });
+
+        console.log("[import] Purge complete.");
+        console.log("[import] Creating entries (createMany) ...");
+
+        if (entryRows.length > 0) {
+            // skipDuplicates is safe even if unique key exists;
+            // when purging, duplicates shouldn't exist anyway.
+            await prisma.entry.createMany({
+                data: entryRows,
+                skipDuplicates: true,
+            });
+        }
+
+        console.log("[import] Entries created.");
+
+        console.log("[import] Creating topics and items...");
+
         for (const t of topicRows) {
-            const created = await tx.topic.create({
+            const createdTopic = await prisma.topic.create({
                 data: {
                     userId: t.userId,
                     name: t.name,
                 },
-                select: { id: true },
+                select: { id: true, name: true },
             });
 
-            for (const it of t.items) {
-                const createdAt = it.createdAt;
-                const { createdAt: _omit, ...itemData } = it;
+            if (t.items.length > 0) {
+                const itemData = t.items.map((it) => ({
+                    topicId: createdTopic.id,
+                    // Your TopicItem model has these fields; if some are not in schema, Prisma will error and we’ll adjust.
+                    title: it.title,
+                    url: it.url,
+                    category: it.category,
+                    finished: it.finished,
+                    finishedAt: it.finishedAt,
+                    author: it.author || "",
+                    notes: it.notes || "",
+                    wordCount: it.wordCount ?? null,
+                    tags: it.tags || [],
+                    ...(it.createdAt ? { createdAt: it.createdAt } : null),
+                }));
 
-                await tx.topicItem.create({
-                    data: {
-                        topicId: created.id,
-                        ...itemData,
-                        ...(createdAt ? { createdAt } : null),
-                    },
+                await prisma.topicItem.createMany({
+                    data: itemData,
+                    skipDuplicates: true,
                 });
             }
-        }
-    });
 
-    console.log("Import complete.");
+            console.log(`[import] Topic created: ${createdTopic.name} (items: ${t.items.length})`);
+        }
+
+        console.log("[import] Import complete (purge mode).");
+        return;
+    }
+
+    // Non-purge mode: keep upsert semantics (idempotent-ish).
+    // Still avoid interactive transaction; do sequential upserts.
+    console.log("[import] Importing (non-purge): upserting entries...");
+
+    for (let i = 0; i < entryRows.length; i += 1) {
+        const row = entryRows[i];
+
+        await prisma.entry.upsert({
+            where: {
+                userId_dayKey_category: {
+                    userId: row.userId,
+                    dayKey: row.dayKey,
+                    category: row.category,
+                },
+            },
+            create: row,
+            update: {
+                title: row.title,
+                author: row.author,
+                url: row.url,
+                notes: row.notes,
+                rating: row.rating,
+                wordCount: row.wordCount,
+                tags: row.tags,
+            },
+        });
+
+        if ((i + 1) % 25 === 0) {
+            console.log(`[import] Upserted entries: ${i + 1}/${entryRows.length}`);
+        }
+    }
+
+    console.log("[import] Entries upserted.");
+    console.log("[import] Creating topics/items (non-purge): naive create (may duplicate if re-run).");
+
+    for (const t of topicRows) {
+        const createdTopic = await prisma.topic.create({
+            data: {
+                userId: t.userId,
+                name: t.name,
+            },
+            select: { id: true, name: true },
+        });
+
+        if (t.items.length > 0) {
+            const itemData = t.items.map((it) => ({
+                topicId: createdTopic.id,
+                title: it.title,
+                url: it.url,
+                category: it.category,
+                finished: it.finished,
+                finishedAt: it.finishedAt,
+                author: it.author || "",
+                notes: it.notes || "",
+                wordCount: it.wordCount ?? null,
+                tags: it.tags || [],
+                ...(it.createdAt ? { createdAt: it.createdAt } : null),
+            }));
+
+            await prisma.topicItem.createMany({
+                data: itemData,
+                skipDuplicates: true,
+            });
+        }
+
+        console.log(`[import] Topic created: ${createdTopic.name} (items: ${t.items.length})`);
+    }
+
+    console.log("[import] Import complete.");
 };
 
 main()
@@ -318,7 +409,7 @@ main()
     .finally(async () => {
         try {
             await prisma.$disconnect();
-        } catch (_err) {
+        } catch {
             // ignore
         }
     });
