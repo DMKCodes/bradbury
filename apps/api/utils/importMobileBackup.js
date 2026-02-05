@@ -31,8 +31,6 @@ import "dotenv/config";
 import fs from "fs";
 import path from "path";
 import process from "process";
-
-// IMPORTANT: use the same Prisma instance as the API server.
 import prisma from "../src/lib/prisma.js";
 
 const parseArgs = (argv) => {
@@ -129,8 +127,6 @@ const main = async () => {
 
     const backup = outerParsed.value || {};
     const dataMap = backup.data || {};
-
-    // These are stringified JSON in the mobile export.
     const curriculumRaw = dataMap.bradbury_curriculum_v1 || "";
     const entriesRaw = dataMap.bradbury_entries_v1 || "";
 
@@ -250,13 +246,6 @@ const main = async () => {
         return;
     }
 
-    // ============================================================
-    // IMPORTANT CHANGE:
-    // - No interactive transaction callback.
-    // - Purge path uses createMany() for speed.
-    // This avoids Prisma's default 5s interactive transaction timeout.
-    // ============================================================
-
     if (purge) {
         console.log("[import] Purging existing user data...");
 
@@ -280,8 +269,6 @@ const main = async () => {
         console.log("[import] Creating entries (createMany) ...");
 
         if (entryRows.length > 0) {
-            // skipDuplicates is safe even if unique key exists;
-            // when purging, duplicates shouldn't exist anyway.
             await prisma.entry.createMany({
                 data: entryRows,
                 skipDuplicates: true,
@@ -304,7 +291,6 @@ const main = async () => {
             if (t.items.length > 0) {
                 const itemData = t.items.map((it) => ({
                     topicId: createdTopic.id,
-                    // Your TopicItem model has these fields; if some are not in schema, Prisma will error and we’ll adjust.
                     title: it.title,
                     url: it.url,
                     category: it.category,
@@ -330,8 +316,7 @@ const main = async () => {
         return;
     }
 
-    // Non-purge mode: keep upsert semantics (idempotent-ish).
-    // Still avoid interactive transaction; do sequential upserts.
+    // Non-purge mode
     console.log("[import] Importing (non-purge): upserting entries...");
 
     for (let i = 0; i < entryRows.length; i += 1) {

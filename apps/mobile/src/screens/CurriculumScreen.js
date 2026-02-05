@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 
 import { addTopic, deleteTopic, listTopics } from "../lib/curriculumStore";
 import { Colors, GlobalStyles } from "../theme/theme";
@@ -10,22 +11,31 @@ const CurriculumScreen = ({ navigation }) => {
     const [topics, setTopics] = useState([]);
     const [newTopic, setNewTopic] = useState("");
 
-    const load = async () => {
+    const load = useCallback(async () => {
         setLoading(true);
         try {
             const t = await listTopics();
             setTopics(t);
         } catch (err) {
-            console.error(err);
+            console.error("[CurriculumScreen] load failed:", err);
             setTopics([]);
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    /**
+     * - useFocusEffect: if new data hydrated from server, reload when focus is restored to screen.
+     */
+    useFocusEffect(
+        useCallback(() => {
+            load();
+        }, [load])
+    );
 
     useEffect(() => {
         load();
-    }, []);
+    }, [load]);
 
     const handleAdd = async () => {
         const name = String(newTopic || "").trim();

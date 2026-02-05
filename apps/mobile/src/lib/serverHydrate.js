@@ -2,10 +2,9 @@
  * serverHydrate.js
  *
  * Early testing flow:
- * - Pull entries and topics from server
+ * - Pull entries & topics from server
  * - Normalize into shapes mobile local stores expect
  * - Replace local stores (user action only)
- * 
  */
 
 import { listEntries as apiListEntries, listTopics as apiListTopics } from "./serverApi";
@@ -14,6 +13,9 @@ import { replaceAllEntries } from "./store";
 import { replaceCurriculum } from "./curriculumStore";
 
 const normalizeEntry = (e) => {
+    const ratingNum = Number(e?.rating);
+    const wordCountNum = e?.wordCount == null ? null : Number(e.wordCount);
+
     return {
         dayKey: String(e?.dayKey || "").trim(),
         category: String(e?.category || "").trim(),
@@ -22,8 +24,8 @@ const normalizeEntry = (e) => {
         url: String(e?.url || "").trim(),
         notes: String(e?.notes || "").trim(),
         tags: Array.isArray(e?.tags) ? e.tags.map((t) => String(t)) : [],
-        rating: Number.isFinite(e?.rating) ? e.rating : 5,
-        wordCount: e?.wordCount == null ? null : Number(e.wordCount),
+        rating: Number.isFinite(ratingNum) ? ratingNum : 5,
+        wordCount: Number.isFinite(wordCountNum) ? wordCountNum : null,
         createdAt: e?.createdAt ? new Date(e.createdAt).getTime() : Date.now(),
         updatedAt: e?.updatedAt ? new Date(e.updatedAt).getTime() : Date.now(),
     };
@@ -40,7 +42,6 @@ const normalizeTopic = (t) => {
             id: String(it?.id || "").trim(),
             title: String(it?.title || "").trim(),
             url: String(it?.url || "").trim(),
-            // Server uses category enum; mobile uses "type" for the same concept.
             type: String(it?.category || it?.type || "").trim(),
             finished: Boolean(it?.finished),
             createdAt: it?.createdAt ? new Date(it.createdAt).getTime() : Date.now(),
@@ -52,7 +53,7 @@ const normalizeTopic = (t) => {
  * hydrateFromServer
  *
  * mode:
- * - "replace": overwrite local entries + curriculum completely
+ * - "replace": overwrite local entries & curriculum completely
  *
  * Returns:
  * - { ok:true, entriesCount, topicsCount }
@@ -63,7 +64,13 @@ const hydrateFromServer = async ({ mode = "replace" } = {}) => {
     }
 
     // 1) Fetch from server
-    const serverEntries = await apiListEntries({});
+    const serverEntriesPayload = await apiListEntries({});
+    const serverEntries = Array.isArray(serverEntriesPayload?.entries)
+        ? serverEntriesPayload.entries
+        : Array.isArray(serverEntriesPayload)
+            ? serverEntriesPayload
+            : [];
+
     const serverTopicsPayload = await apiListTopics();
     const serverTopics = Array.isArray(serverTopicsPayload?.topics)
         ? serverTopicsPayload.topics
@@ -72,11 +79,9 @@ const hydrateFromServer = async ({ mode = "replace" } = {}) => {
             : [];
 
     // 2) Normalize
-    const normalizedEntries = Array.isArray(serverEntries)
-        ? serverEntries
-            .map(normalizeEntry)
-            .filter((e) => e.dayKey && e.category && e.title)
-        : [];
+    const normalizedEntries = serverEntries
+        .map(normalizeEntry)
+        .filter((e) => e.dayKey && e.category && e.title);
 
     const normalizedTopics = serverTopics
         .map(normalizeTopic)
