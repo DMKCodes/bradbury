@@ -10,6 +10,8 @@ const ITEM_CATEGORY_VALUES = ["essay", "story", "poem"];
 
 const createTopicSchema = z.object({
     name: z.string().min(1),
+    // Stable ID generated client-side
+    clientId: z.string().optional().nullable(),
 });
 
 const addItemBodySchema = z.object({
@@ -20,6 +22,12 @@ const addItemBodySchema = z.object({
     wordCount: z.number().int().nonnegative().optional().nullable(),
     notes: z.string().optional().nullable(),
     tags: z.array(z.string()).optional().default([]),
+
+    // Stable ID generated client-side
+    clientId: z.string().optional().nullable(),
+
+    // Mobile syncs finished state directly (no toggle drift)
+    finished: z.boolean().optional().nullable(),
 });
 
 // ---------- Helpers ----------
@@ -60,10 +68,36 @@ topicsRouter.post("/", async (req, res, next) => {
             return res.status(400).json({ ok: false, error: "invalid_input" });
         }
 
+        const safeName = parsed.data.name.trim();
+        const safeClientId = parsed.data.clientId ? String(parsed.data.clientId).trim() : "";
+
+        // If clientId is provided, do idempotent upsert.
+        if (safeClientId) {
+            const topic = await req.prisma.topic.upsert({
+                where: {
+                    userId_clientId: {
+                        userId: req.userId,
+                        clientId: safeClientId,
+                    },
+                },
+                create: {
+                    userId: req.userId,
+                    clientId: safeClientId,
+                    name: safeName,
+                },
+                update: {
+                    name: safeName,
+                },
+            });
+
+            return res.json({ ok: true, topic });
+        }
+
+        // Else keep old behavior (web-friendly).
         const topic = await req.prisma.topic.create({
             data: {
                 userId: req.userId,
-                name: parsed.data.name.trim(),
+                name: safeName,
             },
         });
 
@@ -134,8 +168,61 @@ topicsRouter.post("/:topicId/items", async (req, res, next) => {
             return res.status(404).json({ ok: false, error: "topic_not_found" });
         }
 
-        const { title, url, category, author, wordCount, notes, tags } = parsed.data;
+        const {
+            title,
+            url,
+            category,
+            author,
+            wordCount,
+            notes,
+            tags,
+            clientId,
+            finished,
+        } = parsed.data;
 
+        const safeClientId = clientId ? String(clientId).trim() : "";
+        const nextFinished = finished == null ? false : Boolean(finished);
+        const nextFinishedAt = nextFinished ? new Date() : null;
+
+        // If clientId is provided, do idempotent upsert.
+        if (safeClientId) {
+            const item = await req.prisma.topicItem.upsert({
+                where: {
+                    topicId_clientId: {
+                        topicId,
+                        clientId: safeClientId,
+                    },
+                },
+                create: {
+                    topicId,
+                    clientId: safeClientId,
+                    title: title.trim(),
+                    url: url ?? "",
+                    category,
+                    author: author ?? "",
+                    wordCount: wordCount ?? null,
+                    notes: notes ?? "",
+                    tags: tags ?? [],
+                    finished: nextFinished,
+                    finishedAt: nextFinishedAt,
+                },
+                update: {
+                    title: title.trim(),
+                    url: url ?? "",
+                    category,
+                    author: author ?? "",
+                    wordCount: wordCount ?? null,
+                    notes: notes ?? "",
+                    tags: tags ?? [],
+                    finished: nextFinished,
+                    finishedAt: nextFinishedAt,
+                },
+            });
+
+            return res.json({ ok: true, item });
+        }
+
+        // Else keep old behavior (web-friendly).
         const item = await req.prisma.topicItem.create({
             data: {
                 topicId,
@@ -216,77 +303,6 @@ topicsRouter.delete("/:topicId/items/:itemId", async (req, res, next) => {
 
         if (!item) {
             return res.status(404).json({ ok: false, error: "item_not_found" });
-        }
-
-        await req.prisma.topicItem.delete({ where: { id: itemId } });
-        return res.json({ ok: true });
-    } catch (err) {
-        return next(err);
-    }
-});
-
-// POST /topics/items  (expects { topicId, ...body })
-topicsRouter.post("/items", async (req, res, next) => {
-    try {
-        const parsed = z
-            .object({
-                topicId: z.string().min(1),
-            })
-            .passthrough()
-            .safeParse(req.body);
-
-        if (!parsed.success) {
-            return res.status(400).json({ ok: false, error: "invalid_input" });
-        }
-
-        // Reuse REST handler
-        req.params.topicId = parsed.data.topicId;
-        return topicsRouter.handle(req, res, next);
-    } catch (err) {
-        return next(err);
-    }
-});
-
-// POST /topics/items/toggle (expects { topicId, itemId })
-topicsRouter.post("/items/toggle", async (req, res, next) => {
-    try {
-        const parsed = z
-            .object({
-                topicId: z.string().min(1),
-                itemId: z.string().min(1),
-            })
-            .safeParse(req.body);
-
-        if (!parsed.success) {
-            return res.status(400).json({ ok: false, error: "invalid_input" });
-        }
-
-        req.params.topicId = parsed.data.topicId;
-        req.params.itemId = parsed.data.itemId;
-        req.url = `/${encodeURIComponent(parsed.data.topicId)}/items/${encodeURIComponent(parsed.data.itemId)}/toggle`;
-        req.method = "POST";
-
-        return topicsRouter.handle(req, res, next);
-    } catch (err) {
-        return next(err);
-    }
-});
-
-// DELETE /topics/items/:itemId
-topicsRouter.delete("/items/:itemId", async (req, res, next) => {
-    try {
-        const itemId = String(req.params.itemId || "").trim();
-        if (!itemId) {
-            return res.status(400).json({ ok: false, error: "invalid_input" });
-        }
-
-        const item = await req.prisma.topicItem.findFirst({
-            where: { id: itemId },
-            include: { topic: { select: { userId: true, id: true } } },
-        });
-
-        if (!item || item.topic.userId !== req.userId) {
-            return res.status(404).json({ ok: false, error: "not_found" });
         }
 
         await req.prisma.topicItem.delete({ where: { id: itemId } });

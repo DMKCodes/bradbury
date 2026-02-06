@@ -8,7 +8,6 @@
  */
 
 import { listEntries as apiListEntries, listTopics as apiListTopics } from "./serverApi";
-
 import { replaceAllEntries } from "./store";
 import { replaceCurriculum } from "./curriculumStore";
 

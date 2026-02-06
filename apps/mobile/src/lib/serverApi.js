@@ -102,6 +102,10 @@ const listTopics = async () => {
     return apiFetch("/topics", { method: "GET" });
 };
 
+const upsertEntry = async (payload) => {
+    return apiFetch("/entries/upsert", { method: "POST", body: payload });
+};
+
 export {
     apiFetch,
     healthCheck,
@@ -111,4 +115,5 @@ export {
     logout,
     listEntries,
     listTopics,
+    upsertEntry,
 };

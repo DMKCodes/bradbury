@@ -7,6 +7,7 @@ import { getApiBaseUrl, getDefaultApiBaseUrl, setApiBaseUrl } from "../../lib/se
 import { getToken } from "../../lib/serverAuth";
 import { healthCheck, login, logout, me, register } from "../../lib/serverApi";
 import { hydrateFromServer } from "../../lib/serverHydrate";
+import { uploadLocalEntriesToServer } from "../../lib/serverSyncEntries";
 
 /**
  * ServerSection
@@ -16,7 +17,7 @@ import { hydrateFromServer } from "../../lib/serverHydrate";
  * - Provide auth (register/login/logout)
  * - Provide test calls (health + /auth/me)
  * - Provide "hydrate from server" action (replace local stores)
- *
+ * - Phase 2A: provide manual "upload local entries -> server" action
  */
 
 const ServerSection = () => {
@@ -32,6 +33,9 @@ const ServerSection = () => {
 
     // Display state
     const [tokenPresent, setTokenPresent] = useState(false);
+
+    // Phase 2A progress UI
+    const [syncProgress, setSyncProgress] = useState(null);
 
     const refreshTokenPresent = async () => {
         try {
@@ -197,6 +201,48 @@ const ServerSection = () => {
         );
     };
 
+    const confirmUploadLocalEntries = () => {
+        if (!tokenPresent) {
+            Alert.alert("Not logged in", "Login first so the app can upload your local entries to the server.");
+            return;
+        }
+
+        Alert.alert(
+            "Upload local entries to server?",
+            "This will read your local entries and upsert them to the server.\n\nFor now, local is treated as the source of truth (offline-first).",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Upload",
+                    onPress: async () => {
+                        setBusy(true);
+                        setSyncProgress({ uploaded: 0, skipped: 0, failed: 0, total: 0 });
+
+                        try {
+                            const res = await uploadLocalEntriesToServer({
+                                onProgress: (p) => {
+                                    setSyncProgress(p);
+                                },
+                            });
+
+                            Alert.alert(
+                                "Upload complete",
+                                `Total considered: ${res.total}\nUploaded: ${res.uploaded}\nSkipped: ${res.skipped}\nFailed: ${res.failed}${
+                                    res.firstError ? `\n\nFirst error:\n${res.firstError}` : ""
+                                }`
+                            );
+                        } catch (err) {
+                            console.error(err);
+                            Alert.alert("Upload failed", String(err?.message || err));
+                        } finally {
+                            setBusy(false);
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
     return (
         <View style={GlobalStyles.card}>
             <Text style={GlobalStyles.label}>Server</Text>
@@ -287,6 +333,31 @@ const ServerSection = () => {
                 <Pressable onPress={confirmHydrateReplace} disabled={busy} style={GlobalStyles.button}>
                     <Text style={GlobalStyles.buttonText}>
                         {busy ? "Working..." : "Hydrate from Server (Replace Local)"}
+                    </Text>
+                </Pressable>
+            </View>
+
+            <View style={{ height: 14 }} />
+
+            <Text style={GlobalStyles.label}>Manual Sync (Phase 2A)</Text>
+            <Text style={GlobalStyles.muted}>
+                Uploads your local Entries to the server via /entries/upsert (offline-first).
+            </Text>
+
+            {syncProgress ? (
+                <Text style={[GlobalStyles.muted, { marginTop: 8 }]}>
+                    Progress: {syncProgress.uploaded}/{syncProgress.total} uploaded
+                    {"  "}•{"  "}
+                    {syncProgress.skipped} skipped
+                    {"  "}•{"  "}
+                    {syncProgress.failed} failed
+                </Text>
+            ) : null}
+
+            <View style={{ marginTop: 10 }}>
+                <Pressable onPress={confirmUploadLocalEntries} disabled={busy} style={GlobalStyles.button}>
+                    <Text style={GlobalStyles.buttonText}>
+                        {busy ? "Working..." : "Upload Local Entries → Server"}
                     </Text>
                 </Pressable>
             </View>

@@ -16,6 +16,9 @@ const upsertSchema = z.object({
     tags: z.array(z.string()).optional().default([]),
     rating: z.number().int().min(1).max(5).optional().default(5),
     wordCount: z.number().int().nonnegative().optional().nullable(),
+
+    // Stable identifier for sync (optional)
+    clientId: z.string().optional().nullable(),
 });
 
 entriesRouter.use(authRequired);
@@ -50,6 +53,7 @@ entriesRouter.post("/upsert", async (req, res, next) => {
         }
 
         const data = parsed.data;
+        const safeClientId = data.clientId ? String(data.clientId).trim() : "";
 
         const entry = await req.prisma.entry.upsert({
             where: {
@@ -61,6 +65,7 @@ entriesRouter.post("/upsert", async (req, res, next) => {
             },
             create: {
                 userId: req.userId,
+                clientId: safeClientId || null,
                 dayKey: data.dayKey,
                 category: data.category,
                 title: data.title,
@@ -72,6 +77,8 @@ entriesRouter.post("/upsert", async (req, res, next) => {
                 wordCount: data.wordCount ?? null,
             },
             update: {
+                // If clientId comes in later, persist it.
+                ...(safeClientId ? { clientId: safeClientId } : null),
                 title: data.title,
                 author: data.author ?? "",
                 url: data.url ?? "",
