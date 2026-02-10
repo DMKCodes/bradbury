@@ -98,12 +98,24 @@ const listEntries = async ({ dayKey } = {}) => {
     return apiFetch(`/entries${qs}`, { method: "GET" });
 };
 
+const upsertEntry = async (payload) => {
+    return apiFetch("/entries/upsert", { method: "POST", body: payload });
+};
+
 const listTopics = async () => {
     return apiFetch("/topics", { method: "GET" });
 };
 
-const upsertEntry = async (payload) => {
-    return apiFetch("/entries/upsert", { method: "POST", body: payload });
+const createTopic = async ({ name, clientId } = {}) => {
+    return apiFetch("/topics", { method: "POST", body: { name, clientId } });
+};
+
+const getTopic = async (topicId) => {
+    return apiFetch(`/topics/${encodeURIComponent(String(topicId))}`, { method: "GET" });
+};
+
+const addTopicItem = async (topicId, payload) => {
+    return apiFetch(`/topics/${encodeURIComponent(String(topicId))}/items`, { method: "POST", body: payload });
 };
 
 export {
@@ -114,6 +126,9 @@ export {
     login,
     logout,
     listEntries,
-    listTopics,
     upsertEntry,
+    listTopics,
+    createTopic,
+    getTopic,
+    addTopicItem,
 };

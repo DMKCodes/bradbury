@@ -1,7 +1,6 @@
 /**
  * serverSyncEntries.js
  *
- * Phase 2A (manual sync):
  * - Upload local entries -> server, via /entries/upsert.
  *
  * Design goals:

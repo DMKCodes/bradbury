@@ -3,10 +3,17 @@
  *
  * Local entries store (AsyncStorage).
  *
- * Phase 1 change:
+ * Phase 1:
  * - Add replaceAllEntries(entries) to support "hydrate from server" (Settings action).
  *
- * Everything else is preserved as-is.
+ * Phase 3A:
+ * - Add mergeEntriesFromServer(entries) to support "pull latest (merge)".
+ *
+ * Merge rule:
+ * - Identity key is (dayKey, category).
+ * - Winner is the record with the highest updatedAt (latest wins).
+ * - If updatedAt is missing, treat as 0 (older).
+ * - Does NOT delete local entries that do not exist on server.
  */
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -120,12 +127,99 @@ const writeAll = async (entries) => {
  * - Simple write into existing storage key.
  * - Does NOT validate every field (serverHydrate normalizes).
  * - Keeps persisted shape identical to what app expects.
- * 
  */
 const replaceAllEntries = async (entries) => {
     const safe = Array.isArray(entries) ? entries : [];
     await writeAll(safe);
     return { ok: true, count: safe.length };
+};
+
+const entryKey = (e) => {
+    const dayKey = String(e?.dayKey || "").trim();
+    const category = String(e?.category || "").trim();
+    return `${dayKey}__${category}`;
+};
+
+const toMillis = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+};
+
+const mergeOneEntry = (localEntry, serverEntry) => {
+    // Both entries are expected to be normalized-ish.
+    const localUpdated = toMillis(localEntry?.updatedAt);
+    const serverUpdated = toMillis(serverEntry?.updatedAt);
+
+    // Latest updatedAt wins. If equal, prefer server to avoid stale server write-back.
+    if (serverUpdated >= localUpdated) {
+        return {
+            ...localEntry,
+            ...serverEntry,
+            createdAt: localEntry?.createdAt ?? serverEntry?.createdAt ?? Date.now(),
+            updatedAt: serverUpdated || localUpdated || Date.now(),
+        };
+    }
+
+    return {
+        ...serverEntry,
+        ...localEntry,
+        createdAt: serverEntry?.createdAt ?? localEntry?.createdAt ?? Date.now(),
+        updatedAt: localUpdated || serverUpdated || Date.now(),
+    };
+};
+
+/**
+ * mergeEntriesFromServer
+ *
+ * Merge rule:
+ * - key: (dayKey, category)
+ * - keep local entries that don't exist on server
+ * - for collisions: latest updatedAt wins
+ *
+ * Returns counts for UI.
+ */
+const mergeEntriesFromServer = async (serverEntries) => {
+    const safeServer = Array.isArray(serverEntries) ? serverEntries : [];
+    const local = await readAll();
+
+    const localMap = new Map();
+    for (const e of local) {
+        const k = entryKey(e);
+        if (!k || k === "__") continue;
+        localMap.set(k, e);
+    }
+
+    let added = 0;
+    let updated = 0;
+
+    for (const se of safeServer) {
+        const k = entryKey(se);
+        if (!k || k === "__") continue;
+
+        const existing = localMap.get(k);
+        if (!existing) {
+            localMap.set(k, se);
+            added += 1;
+            continue;
+        }
+
+        const merged = mergeOneEntry(existing, se);
+        const prevUpdated = toMillis(existing?.updatedAt);
+        const nextUpdated = toMillis(merged?.updatedAt);
+
+        localMap.set(k, merged);
+
+        // Count as updated if the merged record differs by updatedAt or title (coarse but useful)
+        if (nextUpdated !== prevUpdated || String(merged?.title || "") !== String(existing?.title || "")) {
+            updated += 1;
+        }
+    }
+
+    const mergedList = Array.from(localMap.values());
+
+    await writeAll(mergedList);
+
+    return { ok: true, added, updated, total: mergedList.length };
 };
 
 const listEntries = async ({ dayKey } = {}) => {
@@ -220,4 +314,5 @@ export {
     upsertEntryForDayCategory,
     deleteEntryForDayCategory,
     replaceAllEntries,
+    mergeEntriesFromServer,
 };

@@ -8,16 +8,20 @@ import { getToken } from "../../lib/serverAuth";
 import { healthCheck, login, logout, me, register } from "../../lib/serverApi";
 import { hydrateFromServer } from "../../lib/serverHydrate";
 import { uploadLocalEntriesToServer } from "../../lib/serverSyncEntries";
+import { uploadLocalCurriculumToServer } from "../../lib/serverSyncCurriculum";
+import { pullLatestMerge } from "../../lib/serverPull";
 
 /**
  * ServerSection
  *
  * Purpose:
- * - Configure the API base URL for mobile (since localhost differs by device/emulator)
+ * - Configure the API base URL for mobile
  * - Provide auth (register/login/logout)
  * - Provide test calls (health + /auth/me)
  * - Provide "hydrate from server" action (replace local stores)
- * - Phase 2A: provide manual "upload local entries -> server" action
+ * - Manual upload local entries & curriculum -> server
+ * - Manual upload local curriculum -> server
+ * - Pull latest from server and merge into local (non-destructive)
  */
 
 const ServerSection = () => {
@@ -33,9 +37,8 @@ const ServerSection = () => {
 
     // Display state
     const [tokenPresent, setTokenPresent] = useState(false);
-
-    // Phase 2A progress UI
-    const [syncProgress, setSyncProgress] = useState(null);
+    const [entriesProgress, setEntriesProgress] = useState(null);
+    const [curriculumProgress, setCurriculumProgress] = useState(null);
 
     const refreshTokenPresent = async () => {
         try {
@@ -61,8 +64,6 @@ const ServerSection = () => {
         setBusy(true);
         try {
             const res = await setApiBaseUrl(apiBaseUrl);
-
-            // Reload
             await loadServerConfig();
 
             Alert.alert(
@@ -104,11 +105,9 @@ const ServerSection = () => {
         setBusy(true);
         try {
             const res = await register({ email: safeEmail, password: safePass });
-
             if (res?.token) {
                 await refreshTokenPresent();
             }
-
             Alert.alert("Registered", "Registration succeeded.");
         } catch (err) {
             console.error(err);
@@ -187,7 +186,7 @@ const ServerSection = () => {
                             const res = await hydrateFromServer({ mode: "replace" });
                             Alert.alert(
                                 "Hydration complete",
-                                `Entries: ${res.entriesCount}\nTopics: ${res.topicsCount}\n\nYour screens will show this data because they already read from local storage.`
+                                `Entries: ${res.entriesCount}\nTopics: ${res.topicsCount}`
                             );
                         } catch (err) {
                             console.error(err);
@@ -216,13 +215,11 @@ const ServerSection = () => {
                     text: "Upload",
                     onPress: async () => {
                         setBusy(true);
-                        setSyncProgress({ uploaded: 0, skipped: 0, failed: 0, total: 0 });
+                        setEntriesProgress({ uploaded: 0, skipped: 0, failed: 0, total: 0 });
 
                         try {
                             const res = await uploadLocalEntriesToServer({
-                                onProgress: (p) => {
-                                    setSyncProgress(p);
-                                },
+                                onProgress: (p) => setEntriesProgress(p),
                             });
 
                             Alert.alert(
@@ -234,6 +231,82 @@ const ServerSection = () => {
                         } catch (err) {
                             console.error(err);
                             Alert.alert("Upload failed", String(err?.message || err));
+                        } finally {
+                            setBusy(false);
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
+    const confirmUploadLocalCurriculum = () => {
+        if (!tokenPresent) {
+            Alert.alert("Not logged in", "Login first so the app can upload your curriculum to the server.");
+            return;
+        }
+
+        Alert.alert(
+            "Upload curriculum to server?",
+            "This will upsert your local Topics + Topic Items to the server using stable clientIds.\n\nSafe to run multiple times.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Upload",
+                    onPress: async () => {
+                        setBusy(true);
+                        setCurriculumProgress({ topicsUpserted: 0, itemsUpserted: 0, skipped: 0, failed: 0, totalTopics: 0 });
+
+                        try {
+                            const res = await uploadLocalCurriculumToServer({
+                                onProgress: (p) => setCurriculumProgress(p),
+                            });
+
+                            Alert.alert(
+                                "Curriculum upload complete",
+                                `Topics considered: ${res.totalTopics}\nTopics upserted: ${res.topicsUpserted}\nItems upserted: ${res.itemsUpserted}\nSkipped: ${res.skipped}\nFailed: ${res.failed}${
+                                    res.firstError ? `\n\nFirst error:\n${res.firstError}` : ""
+                                }`
+                            );
+                        } catch (err) {
+                            console.error(err);
+                            Alert.alert("Upload failed", String(err?.message || err));
+                        } finally {
+                            setBusy(false);
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
+    const confirmPullLatestMerge = () => {
+        if (!tokenPresent) {
+            Alert.alert("Not logged in", "Login first so the app can pull your data from the server.");
+            return;
+        }
+
+        Alert.alert(
+            "Pull latest from server (merge into local)?",
+            "This will download server Entries + Curriculum and merge into your local storage.\n\nLocal-only items will be kept.\nConflicts resolve by latest updatedAt.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Pull + Merge",
+                    onPress: async () => {
+                        setBusy(true);
+                        try {
+                            const res = await pullLatestMerge();
+
+                            Alert.alert(
+                                "Pull complete",
+                                `Entries: +${res.entries.added} added, ${res.entries.updated} updated\n` +
+                                `Curriculum: +${res.curriculum.topicsAdded} topics, ${res.curriculum.topicsUpdated} topics updated\n` +
+                                `Items: +${res.curriculum.itemsAdded} items, ${res.curriculum.itemsUpdated} items updated`
+                            );
+                        } catch (err) {
+                            console.error(err);
+                            Alert.alert("Pull failed", String(err?.message || err));
                         } finally {
                             setBusy(false);
                         }
@@ -326,7 +399,6 @@ const ServerSection = () => {
             <Text style={GlobalStyles.label}>Hydration (Phase 1)</Text>
             <Text style={GlobalStyles.muted}>
                 Downloads Entries + Curriculum from the server and writes them into local storage (replace-only).
-                This does not change your existing screens.
             </Text>
 
             <View style={{ marginTop: 10 }}>
@@ -344,13 +416,13 @@ const ServerSection = () => {
                 Uploads your local Entries to the server via /entries/upsert (offline-first).
             </Text>
 
-            {syncProgress ? (
+            {entriesProgress ? (
                 <Text style={[GlobalStyles.muted, { marginTop: 8 }]}>
-                    Progress: {syncProgress.uploaded}/{syncProgress.total} uploaded
+                    Progress: {entriesProgress.uploaded}/{entriesProgress.total} uploaded
                     {"  "}•{"  "}
-                    {syncProgress.skipped} skipped
+                    {entriesProgress.skipped} skipped
                     {"  "}•{"  "}
-                    {syncProgress.failed} failed
+                    {entriesProgress.failed} failed
                 </Text>
             ) : null}
 
@@ -358,6 +430,49 @@ const ServerSection = () => {
                 <Pressable onPress={confirmUploadLocalEntries} disabled={busy} style={GlobalStyles.button}>
                     <Text style={GlobalStyles.buttonText}>
                         {busy ? "Working..." : "Upload Local Entries → Server"}
+                    </Text>
+                </Pressable>
+            </View>
+
+            <View style={{ height: 14 }} />
+
+            <Text style={GlobalStyles.label}>Manual Sync (Phase 2B)</Text>
+            <Text style={GlobalStyles.muted}>
+                Uploads your local Curriculum (Topics + Items) to the server using stable clientIds.
+            </Text>
+
+            {curriculumProgress ? (
+                <Text style={[GlobalStyles.muted, { marginTop: 8 }]}>
+                    Topics: {curriculumProgress.topicsUpserted}/{curriculumProgress.totalTopics} upserted
+                    {"  "}•{"  "}
+                    Items: {curriculumProgress.itemsUpserted} upserted
+                    {"  "}•{"  "}
+                    {curriculumProgress.skipped} skipped
+                    {"  "}•{"  "}
+                    {curriculumProgress.failed} failed
+                </Text>
+            ) : null}
+
+            <View style={{ marginTop: 10 }}>
+                <Pressable onPress={confirmUploadLocalCurriculum} disabled={busy} style={GlobalStyles.button}>
+                    <Text style={GlobalStyles.buttonText}>
+                        {busy ? "Working..." : "Upload Curriculum → Server"}
+                    </Text>
+                </Pressable>
+            </View>
+
+            <View style={{ height: 14 }} />
+
+            <Text style={GlobalStyles.label}>Pull Latest (Phase 3A)</Text>
+            <Text style={GlobalStyles.muted}>
+                Downloads server Entries + Curriculum and merges into local storage (non-destructive).
+                Conflicts resolve by latest updatedAt.
+            </Text>
+
+            <View style={{ marginTop: 10 }}>
+                <Pressable onPress={confirmPullLatestMerge} disabled={busy} style={GlobalStyles.button}>
+                    <Text style={GlobalStyles.buttonText}>
+                        {busy ? "Working..." : "Pull Latest → Merge into Local"}
                     </Text>
                 </Pressable>
             </View>
